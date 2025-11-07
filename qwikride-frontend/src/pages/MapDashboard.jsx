@@ -100,7 +100,9 @@ const MapDashboard = () => {
 
   const addConsoleMessage = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
-    setConsoleMessages(prev => [...prev, { message, type, timestamp, id: Date.now() }]);
+    // Use crypto.randomUUID() or a combination of Date.now() and random for unique IDs
+    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setConsoleMessages(prev => [...prev, { message, type, timestamp, id }]);
   };
 
   const handleStationClick = (station) => {
@@ -122,6 +124,12 @@ const MapDashboard = () => {
 
   const handleReturn = async (bikeId, stationId) => {
     try {
+      // Validate user is logged in
+      if (!user?.id) {
+        addConsoleMessage('Please log in to return a bike', 'error');
+        return;
+      }
+
       const station = stations.find(s => s.id === stationId);
       const freeDocks = station.capacity - station.currentBikeCount;
       
@@ -139,7 +147,7 @@ const MapDashboard = () => {
       await api.post('/bikes/return', {
         bikeId,
         returnStationId: stationId,
-        userId: user?.id,
+        userId: user.id,
         durationMinutes,
         distanceKm
       });
@@ -153,6 +161,12 @@ const MapDashboard = () => {
 
   const handleReserve = async (stationId) => {
     try {
+      // Validate user is logged in
+      if (!user?.id) {
+        addConsoleMessage('Please log in to reserve a bike', 'error');
+        return;
+      }
+
       const station = stations.find(s => s.id === stationId);
       const availableBikes = bikes.filter(b => b.stationId === stationId && b.status === 'AVAILABLE');
       
@@ -167,7 +181,7 @@ const MapDashboard = () => {
 
       await api.post('/bikes/reserve', {
         stationId,
-        userId: user?.id,
+        userId: user.id,
         expiresAfterMinutes: 15
       });
       await loadData();
@@ -180,6 +194,12 @@ const MapDashboard = () => {
 
   const handleMove = async (bikeId, sourceStationId, destinationStationId) => {
     try {
+      // Validate user is logged in
+      if (!user?.id) {
+        addConsoleMessage('Please log in to move bikes', 'error');
+        return;
+      }
+
       const sourceStation = stations.find(s => s.id === sourceStationId);
       const destStation = stations.find(s => s.id === destinationStationId);
       const sourceBikes = bikes.filter(b => b.stationId === sourceStationId && b.status === 'AVAILABLE');
@@ -202,7 +222,7 @@ const MapDashboard = () => {
       await api.post('/bikes/move', {
         bikeId,
         newStationId: destinationStationId,
-        operatorId: user?.id
+        operatorId: user.id
       });
       await loadData();
       addConsoleMessage(`Bike moved from ${sourceStation.name} to ${destStation.name}`, 'success');

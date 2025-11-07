@@ -195,7 +195,8 @@ const Pricing = () => {
   }, []);
 
   const fetchBillingHistory = useCallback(async () => {
-    if (!isAuthenticatedRider || !user?.id) {
+    // Don't make API calls if user is not authenticated or token is missing
+    if (!isAuthenticatedRider || !user?.id || !localStorage.getItem('token')) {
       setHistory([]);
       setHistoryError(null);
       setHistoryLoading(false);
@@ -247,7 +248,8 @@ const Pricing = () => {
   }, [isAuthenticatedRider, updateUser, user?.id]);
 
   const fetchDisputes = useCallback(async () => {
-    if (!isRider) {
+    // Don't make API calls if user is not authenticated or token is missing
+    if (!isRider || !user?.id || !localStorage.getItem('token')) {
       setDisputes([]);
       setDisputesError(null);
       setDisputesLoading(false);
@@ -265,10 +267,11 @@ const Pricing = () => {
     } finally {
       setDisputesLoading(false);
     }
-  }, [isRider]);
+  }, [isRider, user?.id]);
 
   const fetchOpenDisputes = useCallback(async () => {
-    if (!isOperator) {
+    // Don't make API calls if user is not authenticated or token is missing
+    if (!isOperator || !user?.id || !localStorage.getItem('token')) {
       setOpenDisputes([]);
       setOpenDisputesError(null);
       setOpenDisputesLoading(false);
@@ -286,10 +289,11 @@ const Pricing = () => {
     } finally {
       setOpenDisputesLoading(false);
     }
-  }, [isOperator]);
+  }, [isOperator, user?.id]);
 
   const fetchAdminPlans = useCallback(async () => {
-    if (!isOperator) {
+    // Don't make API calls if user is not authenticated or token is missing
+    if (!isOperator || !user?.id || !localStorage.getItem('token')) {
       setAdminPlans([]);
       setAdminPlansError(null);
       setAdminPlansLoading(false);
@@ -307,7 +311,7 @@ const Pricing = () => {
     } finally {
       setAdminPlansLoading(false);
     }
-  }, [isOperator]);
+  }, [isOperator, user?.id]);
 
   useEffect(() => {
     fetchPlans();
