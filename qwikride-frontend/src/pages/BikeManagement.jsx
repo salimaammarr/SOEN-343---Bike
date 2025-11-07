@@ -14,8 +14,16 @@ const BikeManagement = () => {
   const [selectedStation, setSelectedStation] = useState(null);
   const [showReserveModal, setShowReserveModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const [reservationData, setReservationData] = useState({ stationId: '', userId: user?.id || 1, expiresAfterMinutes: 15 });
-  const [moveData, setMoveData] = useState({ bikeId: '', newStationId: '', operatorId: user?.id || 1 });
+  const [reservationData, setReservationData] = useState({ stationId: '', userId: '', expiresAfterMinutes: 15 });
+  const [moveData, setMoveData] = useState({ bikeId: '', newStationId: '', operatorId: '' });
+
+  // Update userId in forms when user changes
+  useEffect(() => {
+    if (user?.id) {
+      setReservationData(prev => ({ ...prev, userId: user.id }));
+      setMoveData(prev => ({ ...prev, operatorId: user.id }));
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     loadData();
@@ -40,53 +48,95 @@ const BikeManagement = () => {
 
   const reserveBike = async () => {
     try {
-      await api.post('/bikes/reserve', reservationData);
+      // Validate user is logged in
+      if (!user?.id) {
+        setError('Please log in to reserve a bike.');
+        return;
+      }
+
+      // Validate station is selected
+      if (!reservationData.stationId) {
+        setError('Please select a station.');
+        return;
+      }
+
+      await api.post('/bikes/reserve', {
+        ...reservationData,
+        userId: user.id // Ensure we use the current user ID
+      });
       setShowReserveModal(false);
-      setReservationData({ stationId: '', userId: user?.id || 1, expiresAfterMinutes: 15 });
+      setReservationData({ stationId: '', userId: user.id, expiresAfterMinutes: 15 });
       setError('');
       loadData();
-    } catch {
-      setError('Failed to reserve bike. Please try again.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reserve bike. Please try again.');
     }
   };
 
   const checkoutBike = async (bikeId) => {
     try {
-      await api.post('/bikes/checkout', { bikeId, userId: user?.id || 1 });
+      // Validate user is logged in
+      if (!user?.id) {
+        setError('Please log in to checkout a bike.');
+        return;
+      }
+
+      await api.post('/bikes/checkout', { bikeId, userId: user.id });
       setError('');
       loadData();
-    } catch {
-      setError('Failed to checkout bike. Please try again.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to checkout bike. Please try again.');
     }
   };
 
   const returnBike = async (bikeId) => {
     try {
+      // Validate user is logged in
+      if (!user?.id) {
+        setError('Please log in to return a bike.');
+        return;
+      }
+
       const durationMinutes = Math.random() * 60 + 10; // Simulate trip duration
       const distanceKm = Math.random() * 20 + 1; // Simulate trip distance
       await api.post('/bikes/return', {
         bikeId,
         returnStationId: selectedStation?.id || stations[0]?.id,
-        userId: user?.id || 1,
+        userId: user.id,
         durationMinutes,
         distanceKm
       });
       setError('');
       loadData();
-    } catch {
-      setError('Failed to return bike. Please try again.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to return bike. Please try again.');
     }
   };
 
   const moveBike = async () => {
     try {
-      await api.post('/bikes/move', moveData);
+      // Validate user is logged in
+      if (!user?.id) {
+        setError('Please log in to move bikes.');
+        return;
+      }
+
+      // Validate station is selected
+      if (!moveData.newStationId) {
+        setError('Please select a destination station.');
+        return;
+      }
+
+      await api.post('/bikes/move', {
+        ...moveData,
+        operatorId: user.id // Ensure we use the current user ID
+      });
       setShowMoveModal(false);
-      setMoveData({ bikeId: '', newStationId: '', operatorId: user?.id || 1 });
+      setMoveData({ bikeId: '', newStationId: '', operatorId: user.id });
       setError('');
       loadData();
-    } catch {
-      setError('Failed to move bike. Please try again.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to move bike. Please try again.');
     }
   };
 
