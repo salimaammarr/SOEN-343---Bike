@@ -23,9 +23,15 @@ import java.util.stream.Collectors;
 public class BillingLedgerService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final UserRepository userRepository;
+    private final com.qwikride.service.FlexDollarsService flexDollarsService;
 
     @Transactional
     public LedgerEntry appendTripEntry(FinalizedBill bill, TripFacts tripFacts) {
+        // Apply flex dollars automatically to reduce the bill total
+        java.math.BigDecimal originalTotal = bill.getTotal();
+        java.math.BigDecimal flexDollarsUsed = flexDollarsService.useFlexDollars(tripFacts.getRiderId(), originalTotal);
+        java.math.BigDecimal finalTotal = originalTotal.subtract(flexDollarsUsed);
+
         LedgerEntry entry = new LedgerEntry();
         entry.setRiderId(tripFacts.getRiderId());
         entry.setPlanVersionId(bill.getPlanVersionId());
@@ -37,16 +43,27 @@ public class BillingLedgerService {
         entry.setEndTime(tripFacts.getEndTime());
         entry.setDurationMinutes(tripFacts.durationMinutes());
         entry.setDistanceKm(tripFacts.getDistanceKm());
-        entry.setTotal(bill.getTotal());
+        entry.setTotal(finalTotal);
         entry.setPaymentStatus(PaymentStatus.PENDING);
-        entry.setCharges(bill.getCharges().stream()
+
+        // Build charges list, adding flex dollars credit if used
+        List<LedgerCharge> charges = bill.getCharges().stream()
                 .map(line -> LedgerCharge.from(line.getCode(), line.getAmount(), line.safeMeta()))
-                .collect(Collectors.toList()));
+                .collect(Collectors.toList());
+
+        // Add flex dollars credit line if flex dollars were used
+        if (flexDollarsUsed.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            charges.add(LedgerCharge.from("FLEX_DOLLARS_CREDIT", 
+                    flexDollarsUsed.negate(), 
+                    java.util.Map.of("description", "Flex dollars applied")));
+        }
+
+        entry.setCharges(charges);
         entry.setSummary(
-                String.format("%s • %d min • $%s", bill.getPlanName(), tripFacts.durationMinutes(), bill.getTotal()));
+                String.format("%s • %d min • $%s", bill.getPlanName(), tripFacts.durationMinutes(), finalTotal));
 
         LedgerEntry saved = ledgerEntryRepository.save(entry);
-        adjustRiderBalance(tripFacts.getRiderId(), bill.getTotal());
+        adjustRiderBalance(tripFacts.getRiderId(), finalTotal);
         return saved;
     }
 

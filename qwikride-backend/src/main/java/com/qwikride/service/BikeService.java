@@ -24,6 +24,7 @@ public class BikeService {
     private final BikeLocationPort bikeLocationPort;
     private final BikeFactoryRegistry bikeFactoryRegistry;
     private final FlexDollarsService flexDollarsService;
+    private final com.qwikride.prc.service.MembershipService membershipService;
 
     @Transactional
     @SuppressWarnings("null")
@@ -60,8 +61,11 @@ public class BikeService {
             throw new IllegalStateException("No available bikes at this station");
         }
 
+        // Calculate reservation time with tier-based extension
+        int extendedMinutes = calculateReservationTimeWithTierExtension(userId, expiresAfterMinutes);
+
         Bike bike = availableBikes.get(0);
-        bike.reserve(userId, expiresAfterMinutes);
+        bike.reserve(userId, extendedMinutes);
         bikeRepository.save(bike);
 
         // Update station count
@@ -238,6 +242,24 @@ public class BikeService {
                 bikeStationRepository.save(station);
             });
         }
+    }
+
+    /**
+     * Calculate reservation time with tier-based extension.
+     * Bronze: +0 minutes
+     * Silver: +2 minutes
+     * Gold: +5 minutes
+     */
+    private int calculateReservationTimeWithTierExtension(Long userId, int baseMinutes) {
+        com.qwikride.prc.domain.MembershipStatus tier = membershipService.resolveMembership(userId);
+        
+        int extensionMinutes = switch (tier) {
+            case SILVER -> 2;
+            case GOLD -> 5;
+            case BRONZE, ENTRY -> 0;
+        };
+        
+        return baseMinutes + extensionMinutes;
     }
 
 }
