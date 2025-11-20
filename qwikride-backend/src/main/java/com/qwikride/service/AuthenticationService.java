@@ -3,6 +3,7 @@ package com.qwikride.service;
 import com.qwikride.dto.LoginRequestDTO;
 import com.qwikride.dto.LoginResponseDTO;
 import com.qwikride.dto.RegistrationRequestDTO;
+import com.qwikride.dto.UserAccountDTO;
 import com.qwikride.model.User;
 import com.qwikride.prc.domain.MembershipStatus;
 import com.qwikride.repository.UserRepository;
@@ -184,5 +185,36 @@ public class AuthenticationService {
                 true, // hasDualRole
                 user.getRole().name() // primaryRole
         );
+    }
+
+    /**
+     * Get current user's account information including flex dollars and tier.
+     */
+    public UserAccountDTO getCurrentUserAccount() {
+        org.springframework.security.core.Authentication authentication = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        
+        if (authentication == null) {
+            throw new IllegalArgumentException("User not authenticated");
+        }
+
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        User.UserRole activeRole = user.getActiveRole() != null ? user.getActiveRole() : user.getRole();
+        boolean hasDualRole = user.getRole() == User.UserRole.OPERATOR;
+
+        return UserAccountDTO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .activeRole(activeRole)
+                .hasDualRole(hasDualRole)
+                .tier(user.getMembershipStatus())
+                .flexDollars(user.getFlexDollars() != null ? user.getFlexDollars() : java.math.BigDecimal.ZERO)
+                .pendingBalance(user.getPendingBalance() != null ? user.getPendingBalance() : java.math.BigDecimal.ZERO)
+                .build();
     }
 }

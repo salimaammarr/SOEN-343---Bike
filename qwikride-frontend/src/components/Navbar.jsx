@@ -76,6 +76,12 @@ const Navbar = () => {
                 >
                   History
                 </Link>
+                <Link
+                  to="/account"
+                  className="transition-colors hover:text-primary-900 dark:hover:text-white"
+                >
+                  Account
+                </Link>
               </>
             )}
           </div>
@@ -111,20 +117,22 @@ const Navbar = () => {
                     <div className="text-xs text-gray-500 dark:text-gray-400">{user.role}</div>
                   </div>
                   
-                  <motion.div 
-                    className="relative"
-                    whileHover={{ scale: 1.1 }}
-                    transition={{ type: 'spring', stiffness: 400 }}
-                  >
-                    <div className="w-9 h-9 bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 rounded-full flex items-center justify-center border border-gray-200 dark:border-gray-700 shadow-sm">
-                      <span className="text-primary-900 dark:text-gray-100 font-bold text-sm">{user.fullName[0]}</span>
-                    </div>
+                  <Link to="/account">
+                    <motion.div 
+                      className="relative"
+                      whileHover={{ scale: 1.1 }}
+                      transition={{ type: 'spring', stiffness: 400 }}
+                    >
+                      <div className="w-9 h-9 bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 rounded-full flex items-center justify-center border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer">
+                        <span className="text-primary-900 dark:text-gray-100 font-bold text-sm">{user.fullName[0]}</span>
+                      </div>
                     <motion.div 
                       animate={{ scale: [1, 1.2, 1] }}
                       transition={{ duration: 2, repeat: Infinity }}
                       className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-900 shadow-sm"
                     />
-                  </motion.div>
+                    </motion.div>
+                  </Link>
                   
                   <motion.button 
                     onClick={logout} 

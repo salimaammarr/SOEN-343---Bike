@@ -4,6 +4,7 @@ import com.qwikride.dto.LoginRequestDTO;
 import com.qwikride.dto.LoginResponseDTO;
 import com.qwikride.dto.RegistrationRequestDTO;
 import com.qwikride.dto.RoleToggleRequestDTO;
+import com.qwikride.dto.UserAccountDTO;
 import com.qwikride.service.AuthenticationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,16 @@ public class AuthenticationController {
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(400).build();
+        }
+    }
+
+    @GetMapping("/account")
+    public ResponseEntity<UserAccountDTO> getAccount() {
+        try {
+            UserAccountDTO account = authenticationService.getCurrentUserAccount();
+            return ResponseEntity.ok(account);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(401).build();
         }
     }
 }
