@@ -1,8 +1,6 @@
 package com.qwikride.prc.service;
 
-import com.qwikride.model.User;
 import com.qwikride.prc.domain.MembershipStatus;
-import com.qwikride.repository.UserRepository;
 import com.qwikride.service.LoyaltyTierService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -11,7 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class MembershipService {
-    private final UserRepository userRepository;
     private final LoyaltyTierService loyaltyTierService;
 
     /**
