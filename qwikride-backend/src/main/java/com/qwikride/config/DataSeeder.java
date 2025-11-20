@@ -77,7 +77,7 @@ public class DataSeeder implements CommandLineRunner {
             operator.setPasswordHash(passwordEncoder.encode("operator123"));
             operator.setPaymentInfo("N/A");
             operator.setRole(User.UserRole.OPERATOR);
-            operator.setMembershipStatus(MembershipStatus.NONE);
+            operator.setMembershipStatus(MembershipStatus.ENTRY);
 
             userRepository.save(operator);
             log.info("✅ Operator account created (username: operator, password: operator123)");
@@ -118,7 +118,7 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private MembershipStatus randomMembership() {
-        MembershipStatus[] tiers = { MembershipStatus.NONE, MembershipStatus.STANDARD, MembershipStatus.PREMIUM };
+        MembershipStatus[] tiers = { MembershipStatus.ENTRY, MembershipStatus.BRONZE, MembershipStatus.SILVER, MembershipStatus.GOLD };
         return tiers[new Random().nextInt(tiers.length)];
     }
 
@@ -248,7 +248,7 @@ public class DataSeeder implements CommandLineRunner {
         standard.setBaseFee(java.math.BigDecimal.valueOf(2.00));
         standard.setPerMinuteRate(java.math.BigDecimal.valueOf(0.25));
         standard.setEbikeSurcharge(java.math.BigDecimal.valueOf(1.00));
-        standard.setMembershipTier(MembershipStatus.NONE);
+        standard.setMembershipTier(MembershipStatus.ENTRY);
         standard.setCityId("MTL");
         standard.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
         standard.setEffectiveTo(null);
@@ -261,7 +261,7 @@ public class DataSeeder implements CommandLineRunner {
         premium.setBaseFee(java.math.BigDecimal.valueOf(0.00));
         premium.setPerMinuteRate(java.math.BigDecimal.valueOf(0.18));
         premium.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.50));
-        premium.setMembershipTier(MembershipStatus.PREMIUM);
+        premium.setMembershipTier(MembershipStatus.GOLD);
         premium.setCityId("MTL");
         premium.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
         premium.setEffectiveTo(null);

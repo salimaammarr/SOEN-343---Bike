@@ -14,6 +14,6 @@ public class MembershipService {
     public MembershipStatus resolveMembership(Long userId) {
         return userRepository.findById(userId)
                 .map(User::getMembershipStatus)
-                .orElse(MembershipStatus.NONE);
+                .orElse(MembershipStatus.ENTRY);
     }
 }

@@ -21,7 +21,7 @@ public class MembershipStrategy implements PlanSelectionStrategy {
     @Override
     public Optional<PricingContext> select(SelectionInput input) {
         MembershipStatus membership = input.getMembershipStatus();
-        if (membership == null || membership == MembershipStatus.NONE) {
+        if (membership == null || membership == MembershipStatus.ENTRY) {
             return Optional.empty();
         }
 

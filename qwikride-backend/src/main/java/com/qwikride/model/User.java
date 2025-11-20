@@ -40,10 +40,13 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private MembershipStatus membershipStatus = MembershipStatus.NONE;
+    private MembershipStatus membershipStatus = MembershipStatus.ENTRY;
 
     @Column(precision = 12, scale = 2)
     private BigDecimal pendingBalance = BigDecimal.ZERO;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal flexDollars = BigDecimal.ZERO;
 
     public enum UserRole {
         RIDER, OPERATOR
