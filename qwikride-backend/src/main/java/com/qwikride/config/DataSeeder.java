@@ -238,96 +238,115 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void createPricingPlans() {
-        // Update existing plans with old names to new tier-based names
+        // Delete all plans with old names (Standard Daily, Premium Member) or any non-tier names
         List<PricingPlanVersion> existingPlans = pricingPlanVersionRepository.findAll();
         for (PricingPlanVersion plan : existingPlans) {
-            if ("Standard Daily".equals(plan.getPlanName()) || "Premium Member".equals(plan.getPlanName())) {
-                // Update old plan names to tier-based names
-                if ("Standard Daily".equals(plan.getPlanName())) {
-                    plan.setPlanName("Entry Tier");
-                    plan.setDescription("Pay-as-you-go plan with per-minute billing. Start riding to unlock tier benefits!");
-                } else if ("Premium Member".equals(plan.getPlanName())) {
-                    plan.setPlanName("Gold Tier");
-                    plan.setDescription("15% discount on trips + 5-minute reservation extension. Our most loyal riders!");
-                }
-                pricingPlanVersionRepository.save(plan);
-                log.info("✅ Updated plan: {} -> {}", plan.getPlanName(), plan.getPlanName());
+            String planName = plan.getPlanName();
+            // Delete plans with old names or any plan that doesn't match tier naming
+            if (planName != null && 
+                (planName.equals("Standard Daily") || 
+                 planName.equals("Premium Member") ||
+                 (!planName.contains("Entry") && 
+                  !planName.contains("Bronze") && 
+                  !planName.contains("Silver") && 
+                  !planName.contains("Gold")))) {
+                pricingPlanVersionRepository.delete(plan);
+                log.info("🗑️  Deleted old plan: {}", planName);
             }
         }
 
-        // Only create new plans if we don't have all tier plans
-        long tierPlanCount = existingPlans.stream()
+        // Check if we have all tier plans
+        List<PricingPlanVersion> tierPlans = pricingPlanVersionRepository.findAll().stream()
                 .filter(p -> p.getPlanName() != null && 
                         (p.getPlanName().contains("Entry") || 
                          p.getPlanName().contains("Bronze") || 
                          p.getPlanName().contains("Silver") || 
                          p.getPlanName().contains("Gold")))
-                .count();
+                .toList();
         
-        if (tierPlanCount >= 4) {
-            return; // All tier plans already exist
+        // Check which tier plans exist
+        boolean hasEntry = tierPlans.stream().anyMatch(p -> p.getPlanName().contains("Entry"));
+        boolean hasBronze = tierPlans.stream().anyMatch(p -> p.getPlanName().contains("Bronze"));
+        boolean hasSilver = tierPlans.stream().anyMatch(p -> p.getPlanName().contains("Silver"));
+        boolean hasGold = tierPlans.stream().anyMatch(p -> p.getPlanName().contains("Gold"));
+        
+        if (hasEntry && hasBronze && hasSilver && hasGold) {
+            log.info("✅ All tier plans already exist");
+            return;
         }
 
-        // Entry Tier Plan
-        PricingPlanVersion entry = new PricingPlanVersion();
-        entry.setId(UUID.randomUUID());
-        entry.setPlanName("Entry Tier");
-        entry.setBaseFee(java.math.BigDecimal.valueOf(2.00));
-        entry.setPerMinuteRate(java.math.BigDecimal.valueOf(0.25));
-        entry.setEbikeSurcharge(java.math.BigDecimal.valueOf(1.00));
-        entry.setMembershipTier(MembershipStatus.ENTRY);
-        entry.setCityId("MTL");
-        entry.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
-        entry.setEffectiveTo(null);
-        entry.setDescription("Pay-as-you-go plan with per-minute billing. Start riding to unlock tier benefits!");
-        entry.setPublished(true);
+        // Create Entry Tier Plan if it doesn't exist
+        if (!hasEntry) {
+            PricingPlanVersion entry = new PricingPlanVersion();
+            entry.setId(UUID.randomUUID());
+            entry.setPlanName("Entry Tier");
+            entry.setBaseFee(java.math.BigDecimal.valueOf(2.00));
+            entry.setPerMinuteRate(java.math.BigDecimal.valueOf(0.25));
+            entry.setEbikeSurcharge(java.math.BigDecimal.valueOf(1.00));
+            entry.setMembershipTier(MembershipStatus.ENTRY);
+            entry.setCityId("MTL");
+            entry.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+            entry.setEffectiveTo(null);
+            entry.setDescription("Pay-as-you-go plan with per-minute billing. Start riding to unlock tier benefits!");
+            entry.setPublished(true);
+            pricingPlanVersionRepository.save(entry);
+            log.info("✅ Created Entry Tier plan");
+        }
 
-        // Bronze Tier Plan
-        PricingPlanVersion bronze = new PricingPlanVersion();
-        bronze.setId(UUID.randomUUID());
-        bronze.setPlanName("Bronze Tier");
-        bronze.setBaseFee(java.math.BigDecimal.valueOf(1.90));
-        bronze.setPerMinuteRate(java.math.BigDecimal.valueOf(0.24));
-        bronze.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.95));
-        bronze.setMembershipTier(MembershipStatus.BRONZE);
-        bronze.setCityId("MTL");
-        bronze.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
-        bronze.setEffectiveTo(null);
-        bronze.setDescription("5% discount on all trips. Earned after 10+ trips with perfect record.");
-        bronze.setPublished(true);
+        // Create Bronze Tier Plan if it doesn't exist
+        if (!hasBronze) {
+            PricingPlanVersion bronze = new PricingPlanVersion();
+            bronze.setId(UUID.randomUUID());
+            bronze.setPlanName("Bronze Tier");
+            bronze.setBaseFee(java.math.BigDecimal.valueOf(1.90));
+            bronze.setPerMinuteRate(java.math.BigDecimal.valueOf(0.24));
+            bronze.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.95));
+            bronze.setMembershipTier(MembershipStatus.BRONZE);
+            bronze.setCityId("MTL");
+            bronze.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+            bronze.setEffectiveTo(null);
+            bronze.setDescription("5% discount on all trips. Earned after 10+ trips with perfect record.");
+            bronze.setPublished(true);
+            pricingPlanVersionRepository.save(bronze);
+            log.info("✅ Created Bronze Tier plan");
+        }
 
-        // Silver Tier Plan
-        PricingPlanVersion silver = new PricingPlanVersion();
-        silver.setId(UUID.randomUUID());
-        silver.setPlanName("Silver Tier");
-        silver.setBaseFee(java.math.BigDecimal.valueOf(1.80));
-        silver.setPerMinuteRate(java.math.BigDecimal.valueOf(0.23));
-        silver.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.90));
-        silver.setMembershipTier(MembershipStatus.SILVER);
-        silver.setCityId("MTL");
-        silver.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
-        silver.setEffectiveTo(null);
-        silver.setDescription("10% discount on trips + 2-minute reservation extension. For active riders.");
-        silver.setPublished(true);
+        // Create Silver Tier Plan if it doesn't exist
+        if (!hasSilver) {
+            PricingPlanVersion silver = new PricingPlanVersion();
+            silver.setId(UUID.randomUUID());
+            silver.setPlanName("Silver Tier");
+            silver.setBaseFee(java.math.BigDecimal.valueOf(1.80));
+            silver.setPerMinuteRate(java.math.BigDecimal.valueOf(0.23));
+            silver.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.90));
+            silver.setMembershipTier(MembershipStatus.SILVER);
+            silver.setCityId("MTL");
+            silver.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+            silver.setEffectiveTo(null);
+            silver.setDescription("10% discount on trips + 2-minute reservation extension. For active riders.");
+            silver.setPublished(true);
+            pricingPlanVersionRepository.save(silver);
+            log.info("✅ Created Silver Tier plan");
+        }
 
-        // Gold Tier Plan
-        PricingPlanVersion gold = new PricingPlanVersion();
-        gold.setId(UUID.randomUUID());
-        gold.setPlanName("Gold Tier");
-        gold.setBaseFee(java.math.BigDecimal.valueOf(1.70));
-        gold.setPerMinuteRate(java.math.BigDecimal.valueOf(0.21));
-        gold.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.85));
-        gold.setMembershipTier(MembershipStatus.GOLD);
-        gold.setCityId("MTL");
-        gold.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
-        gold.setEffectiveTo(null);
-        gold.setDescription("15% discount on trips + 5-minute reservation extension. Our most loyal riders!");
-        gold.setPublished(true);
-
-        pricingPlanVersionRepository.save(entry);
-        pricingPlanVersionRepository.save(bronze);
-        pricingPlanVersionRepository.save(silver);
-        pricingPlanVersionRepository.save(gold);
-        log.info("✅ Created sample pricing plans (Entry, Bronze, Silver, Gold tiers)");
+        // Create Gold Tier Plan if it doesn't exist
+        if (!hasGold) {
+            PricingPlanVersion gold = new PricingPlanVersion();
+            gold.setId(UUID.randomUUID());
+            gold.setPlanName("Gold Tier");
+            gold.setBaseFee(java.math.BigDecimal.valueOf(1.70));
+            gold.setPerMinuteRate(java.math.BigDecimal.valueOf(0.21));
+            gold.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.85));
+            gold.setMembershipTier(MembershipStatus.GOLD);
+            gold.setCityId("MTL");
+            gold.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+            gold.setEffectiveTo(null);
+            gold.setDescription("15% discount on trips + 5-minute reservation extension. Our most loyal riders!");
+            gold.setPublished(true);
+            pricingPlanVersionRepository.save(gold);
+            log.info("✅ Created Gold Tier plan");
+        }
+        
+        log.info("✅ Pricing plans initialized (Entry, Bronze, Silver, Gold tiers)");
     }
 }
