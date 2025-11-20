@@ -238,8 +238,34 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void createPricingPlans() {
-        if (pricingPlanVersionRepository.count() > 0) {
-            return;
+        // Update existing plans with old names to new tier-based names
+        List<PricingPlanVersion> existingPlans = pricingPlanVersionRepository.findAll();
+        for (PricingPlanVersion plan : existingPlans) {
+            if ("Standard Daily".equals(plan.getPlanName()) || "Premium Member".equals(plan.getPlanName())) {
+                // Update old plan names to tier-based names
+                if ("Standard Daily".equals(plan.getPlanName())) {
+                    plan.setPlanName("Entry Tier");
+                    plan.setDescription("Pay-as-you-go plan with per-minute billing. Start riding to unlock tier benefits!");
+                } else if ("Premium Member".equals(plan.getPlanName())) {
+                    plan.setPlanName("Gold Tier");
+                    plan.setDescription("15% discount on trips + 5-minute reservation extension. Our most loyal riders!");
+                }
+                pricingPlanVersionRepository.save(plan);
+                log.info("✅ Updated plan: {} -> {}", plan.getPlanName(), plan.getPlanName());
+            }
+        }
+
+        // Only create new plans if we don't have all tier plans
+        long tierPlanCount = existingPlans.stream()
+                .filter(p -> p.getPlanName() != null && 
+                        (p.getPlanName().contains("Entry") || 
+                         p.getPlanName().contains("Bronze") || 
+                         p.getPlanName().contains("Silver") || 
+                         p.getPlanName().contains("Gold")))
+                .count();
+        
+        if (tierPlanCount >= 4) {
+            return; // All tier plans already exist
         }
 
         // Entry Tier Plan
