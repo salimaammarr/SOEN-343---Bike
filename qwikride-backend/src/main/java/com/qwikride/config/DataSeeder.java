@@ -242,34 +242,66 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
-        PricingPlanVersion standard = new PricingPlanVersion();
-        standard.setId(UUID.randomUUID());
-        standard.setPlanName("Standard Daily");
-        standard.setBaseFee(java.math.BigDecimal.valueOf(2.00));
-        standard.setPerMinuteRate(java.math.BigDecimal.valueOf(0.25));
-        standard.setEbikeSurcharge(java.math.BigDecimal.valueOf(1.00));
-        standard.setMembershipTier(MembershipStatus.ENTRY);
-        standard.setCityId("MTL");
-        standard.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
-        standard.setEffectiveTo(null);
-        standard.setDescription("Pay-as-you-go plan with per-minute billing");
-        standard.setPublished(true);
+        // Entry Tier Plan
+        PricingPlanVersion entry = new PricingPlanVersion();
+        entry.setId(UUID.randomUUID());
+        entry.setPlanName("Entry Tier");
+        entry.setBaseFee(java.math.BigDecimal.valueOf(2.00));
+        entry.setPerMinuteRate(java.math.BigDecimal.valueOf(0.25));
+        entry.setEbikeSurcharge(java.math.BigDecimal.valueOf(1.00));
+        entry.setMembershipTier(MembershipStatus.ENTRY);
+        entry.setCityId("MTL");
+        entry.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+        entry.setEffectiveTo(null);
+        entry.setDescription("Pay-as-you-go plan with per-minute billing. Start riding to unlock tier benefits!");
+        entry.setPublished(true);
 
+        // Bronze Tier Plan
+        PricingPlanVersion bronze = new PricingPlanVersion();
+        bronze.setId(UUID.randomUUID());
+        bronze.setPlanName("Bronze Tier");
+        bronze.setBaseFee(java.math.BigDecimal.valueOf(1.90));
+        bronze.setPerMinuteRate(java.math.BigDecimal.valueOf(0.24));
+        bronze.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.95));
+        bronze.setMembershipTier(MembershipStatus.BRONZE);
+        bronze.setCityId("MTL");
+        bronze.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+        bronze.setEffectiveTo(null);
+        bronze.setDescription("5% discount on all trips. Earned after 10+ trips with perfect record.");
+        bronze.setPublished(true);
+
+        // Silver Tier Plan
+        PricingPlanVersion silver = new PricingPlanVersion();
+        silver.setId(UUID.randomUUID());
+        silver.setPlanName("Silver Tier");
+        silver.setBaseFee(java.math.BigDecimal.valueOf(1.80));
+        silver.setPerMinuteRate(java.math.BigDecimal.valueOf(0.23));
+        silver.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.90));
+        silver.setMembershipTier(MembershipStatus.SILVER);
+        silver.setCityId("MTL");
+        silver.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+        silver.setEffectiveTo(null);
+        silver.setDescription("10% discount on trips + 2-minute reservation extension. For active riders.");
+        silver.setPublished(true);
+
+        // Gold Tier Plan
         PricingPlanVersion gold = new PricingPlanVersion();
         gold.setId(UUID.randomUUID());
-        gold.setPlanName("Gold Tier Plan");
-        gold.setBaseFee(java.math.BigDecimal.valueOf(0.00));
-        gold.setPerMinuteRate(java.math.BigDecimal.valueOf(0.18));
-        gold.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.50));
+        gold.setPlanName("Gold Tier");
+        gold.setBaseFee(java.math.BigDecimal.valueOf(1.70));
+        gold.setPerMinuteRate(java.math.BigDecimal.valueOf(0.21));
+        gold.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.85));
         gold.setMembershipTier(MembershipStatus.GOLD);
         gold.setCityId("MTL");
         gold.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
         gold.setEffectiveTo(null);
-        gold.setDescription("Discounted rates for Gold tier members (15% discount + 5min reservation extension)");
+        gold.setDescription("15% discount on trips + 5-minute reservation extension. Our most loyal riders!");
         gold.setPublished(true);
 
-        pricingPlanVersionRepository.save(standard);
+        pricingPlanVersionRepository.save(entry);
+        pricingPlanVersionRepository.save(bronze);
+        pricingPlanVersionRepository.save(silver);
         pricingPlanVersionRepository.save(gold);
-        log.info("✅ Created sample pricing plans (Standard Daily, Gold Tier Plan)");
+        log.info("✅ Created sample pricing plans (Entry, Bronze, Silver, Gold tiers)");
     }
 }
