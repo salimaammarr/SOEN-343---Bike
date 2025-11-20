@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AuthContext } from './AuthContext';
+import { authService } from '../services/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -38,8 +39,39 @@ export const AuthProvider = ({ children }) => {
     });
   }, []);
 
+  const toggleRole = useCallback(async (newRole) => {
+    try {
+      const response = await authService.toggleRole(newRole);
+      const { token, username, fullName, role, id, tier, tierChangeNotification, hasDualRole, primaryRole } = response.data;
+      
+      const updatedUser = {
+        username,
+        fullName,
+        role,
+        id,
+        tier,
+        tierChangeNotification,
+        hasDualRole: hasDualRole || false,
+        primaryRole: primaryRole || role
+      };
+      
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      
+      if (tierChangeNotification) {
+        sessionStorage.setItem('tierNotification', tierChangeNotification);
+      }
+      
+      return updatedUser;
+    } catch (error) {
+      console.error('Failed to toggle role:', error);
+      throw error;
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateUser, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, toggleRole, loading }}>
       {children}
     </AuthContext.Provider>
   );

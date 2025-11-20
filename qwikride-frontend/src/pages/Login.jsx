@@ -28,8 +28,24 @@ const Login = () => {
 
     try {
       const response = await authService.login(formData);
-      const { token, username, fullName, role, id } = response.data;
-      login(token, { username, fullName, role, id });
+      const { token, username, fullName, role, id, tier, tierChangeNotification, hasDualRole, primaryRole } = response.data;
+      login(token, { 
+        username, 
+        fullName, 
+        role, 
+        id, 
+        tier, 
+        tierChangeNotification,
+        hasDualRole: hasDualRole || false,
+        primaryRole: primaryRole || role
+      });
+      
+      // Show tier change notification if present
+      if (tierChangeNotification) {
+        // Store notification to show in dashboard
+        sessionStorage.setItem('tierNotification', tierChangeNotification);
+      }
+      
       navigate('/dashboard');
     } catch {
       setError('Invalid username or password');

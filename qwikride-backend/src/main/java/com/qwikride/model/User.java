@@ -38,6 +38,14 @@ public class User {
     @Column(nullable = false)
     private UserRole role = UserRole.RIDER;
 
+    /**
+     * Active role for dual-role users (OPERATOR can also be RIDER).
+     * If null, uses the primary role. Allows toggling between roles.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "active_role")
+    private UserRole activeRole;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MembershipStatus membershipStatus = MembershipStatus.ENTRY;

@@ -3,6 +3,7 @@ package com.qwikride.controller;
 import com.qwikride.dto.LoginRequestDTO;
 import com.qwikride.dto.LoginResponseDTO;
 import com.qwikride.dto.RegistrationRequestDTO;
+import com.qwikride.dto.RoleToggleRequestDTO;
 import com.qwikride.service.AuthenticationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,14 +27,23 @@ public class AuthenticationController {
         }
     }
 
-   @PostMapping("/register")
-public ResponseEntity<?> register(@Valid @RequestBody RegistrationRequestDTO dto) {
-    try {
-        authenticationService.register(dto); 
-        return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully");
-        } 
-    catch (Exception e) { 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@Valid @RequestBody RegistrationRequestDTO dto) {
+        try {
+            authenticationService.register(dto); 
+            return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully");
+        } catch (Exception e) { 
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/toggle-role")
+    public ResponseEntity<LoginResponseDTO> toggleRole(@Valid @RequestBody RoleToggleRequestDTO dto) {
+        try {
+            LoginResponseDTO response = authenticationService.toggleRole(dto.getRole());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).build();
         }
     }
 }

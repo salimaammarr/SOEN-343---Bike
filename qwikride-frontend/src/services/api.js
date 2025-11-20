@@ -26,6 +26,10 @@ export const authService = {
     const response = await api.post('/auth/login', credentials);
     return response;
   },
+  toggleRole: async (role) => {
+    const response = await api.post('/auth/toggle-role', { role });
+    return response;
+  },
 };
 
 export const rideHistoryService = {
