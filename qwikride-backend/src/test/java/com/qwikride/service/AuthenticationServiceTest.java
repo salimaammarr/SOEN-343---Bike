@@ -25,6 +25,9 @@ class AuthenticationServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private LoyaltyTierService loyaltyTierService;
+
     private JwtUtil jwtUtil;
 
     private AuthenticationService authenticationService;
@@ -32,7 +35,7 @@ class AuthenticationServiceTest {
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
         this.jwtUtil = new JwtUtil();
-        this.authenticationService = new AuthenticationService(userRepository, passwordEncoder, jwtUtil);
+        this.authenticationService = new AuthenticationService(userRepository, passwordEncoder, jwtUtil, loyaltyTierService);
     }
 
     @Test
@@ -47,9 +50,16 @@ class AuthenticationServiceTest {
         user.setFullName("John Doe");
         user.setPasswordHash("hashedPassword");
         user.setRole(User.UserRole.RIDER);
+        user.setMembershipStatus(com.qwikride.prc.domain.MembershipStatus.ENTRY);
 
         when(userRepository.findByUsername("johndoe")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("password123", "hashedPassword")).thenReturn(true);
+        when(loyaltyTierService.evaluateAndUpdateTier(any())).thenReturn(
+            new LoyaltyTierService.TierEvaluationResult(
+                com.qwikride.prc.domain.MembershipStatus.ENTRY, false, com.qwikride.prc.domain.MembershipStatus.ENTRY
+            )
+        );
+        when(userRepository.findById(any())).thenReturn(Optional.of(user));
 
         // When
         LoginResponseDTO response = authenticationService.authenticate(dto);
