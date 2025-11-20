@@ -92,7 +92,9 @@ const MapDashboard = () => {
         api.get('/bikes')
       ]);
       setStations(stationsResponse.data);
-      setBikes(bikesResponse.data);
+      // Handle paginated response (if content exists) or direct array
+      const bikesData = bikesResponse.data?.content || bikesResponse.data || [];
+      setBikes(Array.isArray(bikesData) ? bikesData : []);
       addConsoleMessage('System loaded successfully', 'success');
     } catch {
       addConsoleMessage('Failed to load system data', 'error');
@@ -123,6 +125,11 @@ const MapDashboard = () => {
   const handleReturn = async () => {
     if (!returnStationId) {
       addConsoleMessage('Please select a station to return the bike to', 'error');
+      return;
+    }
+
+    if (!bikeToReturn) {
+      addConsoleMessage('No bike selected to return', 'error');
       return;
     }
 
@@ -164,13 +171,15 @@ const MapDashboard = () => {
 
       console.log('MapDashboard returning bike:', JSON.stringify(payload, null, 2));
       await api.post('/bikes/return', payload);
-      await loadData();
       setShowReturnModal(false);
       setBikeToReturn(null);
       setReturnStationId('');
+      await loadData();
       addConsoleMessage('Bike returned successfully', 'success');
     } catch (error) {
-      console.error('MapDashboard return error:', error.response?.data);
+      console.error('MapDashboard return error:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
       const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Failed to return bike';
       addConsoleMessage(errorMsg, 'error');
     }
@@ -398,6 +407,7 @@ const MapDashboard = () => {
                   onToggleStationStatus={handleToggleStationStatus}
                   stations={stations}
                   userRole={user?.role}
+                  userId={user?.id}
                 />
               )}
             </AnimatePresence>

@@ -13,7 +13,8 @@ const StationDetailsPanel = ({
   onMarkMaintenance,
   onToggleStationStatus,
   stations,
-  userRole
+  userRole,
+  userId // Current user's ID
 }) => {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [selectedBike, setSelectedBike] = useState(null);
@@ -246,7 +247,11 @@ const StationDetailsPanel = ({
                     <button
                       onClick={() => {
                         // Find the user's bike that is currently IN_USE from all bikes
-                        const userBike = allBikes?.find(b => b.status === 'IN_USE') || allBikes?.find(b => b.status === 'RESERVED');
+                        // Filter by currentUserId if available, otherwise by status
+                        const userBike = userId 
+                          ? allBikes?.find(b => b.status === 'IN_USE' && b.currentUserId === userId)
+                          : allBikes?.find(b => b.status === 'IN_USE');
+                        
                         if (userBike) {
                           onReturn(userBike.id);
                         } else {
