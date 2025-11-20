@@ -14,6 +14,9 @@ const BikeManagement = () => {
   const [selectedStation, setSelectedStation] = useState(null);
   const [showReserveModal, setShowReserveModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [bikeToReturn, setBikeToReturn] = useState(null);
+  const [returnStationId, setReturnStationId] = useState('');
   const [reservationData, setReservationData] = useState({ stationId: '', userId: '', expiresAfterMinutes: 15 });
   const [moveData, setMoveData] = useState({ bikeId: '', newStationId: '', operatorId: '' });
 
@@ -115,11 +118,39 @@ const BikeManagement = () => {
     }
   };
 
-  const returnBike = async (bikeId) => {
+  const openReturnModal = (bikeId) => {
+    setBikeToReturn(bikeId);
+    setReturnStationId('');
+    setShowReturnModal(true);
+  };
+
+  const returnBike = async () => {
+    if (!returnStationId) {
+      setError('Please select a station to return the bike to.');
+      return;
+    }
+
     try {
       // Validate user is logged in
       if (!user?.id) {
         setError('Please log in to return a bike.');
+        return;
+      }
+
+      const selectedReturnStation = stations.find(s => s.id === Number(returnStationId));
+      if (!selectedReturnStation) {
+        setError('Selected station not found.');
+        return;
+      }
+
+      // Check if station has capacity
+      if (selectedReturnStation.currentBikeCount >= selectedReturnStation.capacity) {
+        setError('Selected station is full. Please choose another station.');
+        return;
+      }
+
+      if (selectedReturnStation.status === 'OUT_OF_SERVICE') {
+        setError('Selected station is out of service. Please choose another station.');
         return;
       }
 
@@ -128,8 +159,8 @@ const BikeManagement = () => {
       
       // bikeId is UUID string, IDs are numbers
       const payload = {
-        bikeId: String(bikeId), // Keep as string (UUID)
-        returnStationId: Number(selectedStation?.id || stations[0]?.id),
+        bikeId: String(bikeToReturn), // Keep as string (UUID)
+        returnStationId: Number(returnStationId),
         userId: Number(user.id),
         durationMinutes: Number(durationMinutes.toFixed(2)),
         distanceKm: Number(distanceKm.toFixed(2))
@@ -138,6 +169,9 @@ const BikeManagement = () => {
       console.log('Returning bike with payload:', JSON.stringify(payload, null, 2));
       await api.post('/bikes/return', payload);
       setError('');
+      setShowReturnModal(false);
+      setBikeToReturn(null);
+      setReturnStationId('');
       loadData();
     } catch (err) {
       console.error('Return bike error:', err);
@@ -443,7 +477,7 @@ const BikeManagement = () => {
                       )}
                       {bike.status === 'IN_USE' && (
                         <button
-                          onClick={() => returnBike(bike.id)}
+                          onClick={() => openReturnModal(bike.id)}
                           className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition-colors"
                         >
                           Return
@@ -571,6 +605,72 @@ const BikeManagement = () => {
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
                 >
                   Move Bike
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Return Bike Modal */}
+        {showReturnModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4"
+            >
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+                Return Bike
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Select Return Station
+                  </label>
+                  <select
+                    value={returnStationId}
+                    onChange={(e) => setReturnStationId(e.target.value)}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="">Select Station</option>
+                    {stations
+                      .filter(s => s.status === 'ACTIVE')
+                      .map(station => {
+                        const freeDocks = station.capacity - station.currentBikeCount;
+                        const isFull = freeDocks === 0;
+                        return (
+                          <option 
+                            key={station.id} 
+                            value={station.id}
+                            disabled={isFull}
+                          >
+                            {station.name} ({freeDocks} free docks{isFull ? ' - FULL' : ''})
+                          </option>
+                        );
+                      })}
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Select the station where you want to return the bike
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowReturnModal(false);
+                    setBikeToReturn(null);
+                    setReturnStationId('');
+                  }}
+                  className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={returnBike}
+                  disabled={!returnStationId}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  Return Bike
                 </button>
               </div>
             </motion.div>

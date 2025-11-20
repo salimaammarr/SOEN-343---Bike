@@ -255,21 +255,21 @@ public class DataSeeder implements CommandLineRunner {
         standard.setDescription("Pay-as-you-go plan with per-minute billing");
         standard.setPublished(true);
 
-        PricingPlanVersion premium = new PricingPlanVersion();
-        premium.setId(UUID.randomUUID());
-        premium.setPlanName("Premium Member");
-        premium.setBaseFee(java.math.BigDecimal.valueOf(0.00));
-        premium.setPerMinuteRate(java.math.BigDecimal.valueOf(0.18));
-        premium.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.50));
-        premium.setMembershipTier(MembershipStatus.GOLD);
-        premium.setCityId("MTL");
-        premium.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
-        premium.setEffectiveTo(null);
-        premium.setDescription("Discounted rates for premium members");
-        premium.setPublished(true);
+        PricingPlanVersion gold = new PricingPlanVersion();
+        gold.setId(UUID.randomUUID());
+        gold.setPlanName("Gold Tier Plan");
+        gold.setBaseFee(java.math.BigDecimal.valueOf(0.00));
+        gold.setPerMinuteRate(java.math.BigDecimal.valueOf(0.18));
+        gold.setEbikeSurcharge(java.math.BigDecimal.valueOf(0.50));
+        gold.setMembershipTier(MembershipStatus.GOLD);
+        gold.setCityId("MTL");
+        gold.setEffectiveFrom(LocalDateTime.now().minusMonths(1));
+        gold.setEffectiveTo(null);
+        gold.setDescription("Discounted rates for Gold tier members (15% discount + 5min reservation extension)");
+        gold.setPublished(true);
 
         pricingPlanVersionRepository.save(standard);
-        pricingPlanVersionRepository.save(premium);
-        log.info("✅ Created sample pricing plans (Standard, Premium)");
+        pricingPlanVersionRepository.save(gold);
+        log.info("✅ Created sample pricing plans (Standard Daily, Gold Tier Plan)");
     }
 }

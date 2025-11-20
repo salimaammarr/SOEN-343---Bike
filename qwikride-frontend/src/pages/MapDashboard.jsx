@@ -75,6 +75,9 @@ const MapDashboard = () => {
   const [selectedStation, setSelectedStation] = useState(null);
   const [showDetailsPanel, setShowDetailsPanel] = useState(false);
   const [consoleMessages, setConsoleMessages] = useState([]);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [bikeToReturn, setBikeToReturn] = useState(null);
+  const [returnStationId, setReturnStationId] = useState('');
 
   useEffect(() => {
     loadData();
@@ -111,7 +114,18 @@ const MapDashboard = () => {
     addConsoleMessage(`Selected station: ${station.name}`, 'info');
   };
 
-  const handleReturn = async (bikeId, stationId) => {
+  const openReturnModal = (bikeId) => {
+    setBikeToReturn(bikeId);
+    setReturnStationId('');
+    setShowReturnModal(true);
+  };
+
+  const handleReturn = async () => {
+    if (!returnStationId) {
+      addConsoleMessage('Please select a station to return the bike to', 'error');
+      return;
+    }
+
     try {
       // Validate user is logged in
       if (!user?.id) {
@@ -119,7 +133,12 @@ const MapDashboard = () => {
         return;
       }
 
-      const station = stations.find(s => s.id === stationId);
+      const station = stations.find(s => s.id === Number(returnStationId));
+      if (!station) {
+        addConsoleMessage('Selected station not found', 'error');
+        return;
+      }
+
       const freeDocks = station.capacity - station.currentBikeCount;
       
       // DM-06: Validate return conditions
@@ -136,8 +155,8 @@ const MapDashboard = () => {
       
       // bikeId is UUID string, IDs are numbers
       const payload = {
-        bikeId: String(bikeId), // Keep as string (UUID)
-        returnStationId: Number(stationId),
+        bikeId: String(bikeToReturn), // Keep as string (UUID)
+        returnStationId: Number(returnStationId),
         userId: Number(user.id),
         durationMinutes: Number(durationMinutes.toFixed(2)),
         distanceKm: Number(distanceKm.toFixed(2))
@@ -146,6 +165,9 @@ const MapDashboard = () => {
       console.log('MapDashboard returning bike:', JSON.stringify(payload, null, 2));
       await api.post('/bikes/return', payload);
       await loadData();
+      setShowReturnModal(false);
+      setBikeToReturn(null);
+      setReturnStationId('');
       addConsoleMessage('Bike returned successfully', 'success');
     } catch (error) {
       console.error('MapDashboard return error:', error.response?.data);
@@ -368,7 +390,7 @@ const MapDashboard = () => {
                   bikes={bikes.filter(b => b.stationId === selectedStation.id)}
                   allBikes={bikes} // Pass all bikes so we can find user's IN_USE bike
                   onClose={() => setShowDetailsPanel(false)}
-                  onReturn={handleReturn}
+                  onReturn={openReturnModal}
                   onReserve={handleReserve}
                   onCheckout={handleCheckout}
                   onMove={handleMove}
@@ -379,6 +401,72 @@ const MapDashboard = () => {
                 />
               )}
             </AnimatePresence>
+
+            {/* Return Bike Modal */}
+            {showReturnModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70]">
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4"
+                >
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+                    Return Bike
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Select Return Station
+                      </label>
+                      <select
+                        value={returnStationId}
+                        onChange={(e) => setReturnStationId(e.target.value)}
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      >
+                        <option value="">Select Station</option>
+                        {stations
+                          .filter(s => s.status === 'ACTIVE')
+                          .map(station => {
+                            const freeDocks = station.capacity - station.currentBikeCount;
+                            const isFull = freeDocks === 0;
+                            return (
+                              <option 
+                                key={station.id} 
+                                value={station.id}
+                                disabled={isFull}
+                              >
+                                {station.name} ({freeDocks} free docks{isFull ? ' - FULL' : ''})
+                              </option>
+                            );
+                          })}
+                      </select>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Select the station where you want to return the bike
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setShowReturnModal(false);
+                        setBikeToReturn(null);
+                        setReturnStationId('');
+                      }}
+                      className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleReturn}
+                      disabled={!returnStationId}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    >
+                      Return Bike
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
           </div>
       </div>
     </motion.div>

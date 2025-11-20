@@ -248,15 +248,14 @@ const StationDetailsPanel = ({
                         // Find the user's bike that is currently IN_USE from all bikes
                         const userBike = allBikes?.find(b => b.status === 'IN_USE') || allBikes?.find(b => b.status === 'RESERVED');
                         if (userBike) {
-                          onReturn(userBike.id, station.id);
+                          onReturn(userBike.id);
                         } else {
                           alert('No active bike to return. Please reserve or checkout a bike first.');
                         }
                       }}
-                      disabled={freeDocks === 0 || station.status === 'OUT_OF_SERVICE'}
-                      className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="btn-secondary"
                     >
-                      Return Bike Here
+                      Return Bike
                     </button>
                   </>
                 )}
