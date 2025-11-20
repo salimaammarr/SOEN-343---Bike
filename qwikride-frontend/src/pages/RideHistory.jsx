@@ -18,6 +18,7 @@ const RideHistory = () => {
     endDate: '',
     status: '',
     bikeType: '',
+    userId: '',
   });
 
   useEffect(() => {
@@ -45,7 +46,12 @@ const RideHistory = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await rideHistoryService.getUserRideHistory(user.id, filters);
+      
+      // Operators can see all ride histories, riders only see their own
+      const response = user.role === 'OPERATOR' 
+        ? await rideHistoryService.getAllRideHistories(filters)
+        : await rideHistoryService.getUserRideHistory(user.id, filters);
+        
       setRideHistory(response.data || []);
     } catch (err) {
       if (err.response?.status === 403) {
@@ -90,6 +96,7 @@ const RideHistory = () => {
       endDate: '',
       status: '',
       bikeType: '',
+      userId: '',
     });
   };
 
@@ -146,15 +153,18 @@ const RideHistory = () => {
           className="mb-8"
         >
           <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-primary-900 via-primary-700 to-primary-900 dark:from-gray-50 dark:via-gray-200 dark:to-gray-50 bg-clip-text text-transparent mb-2">
-            Ride History
+            {user?.role === 'OPERATOR' ? 'All Riders History' : 'Ride History'}
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            View your past rides and journey statistics
+            {user?.role === 'OPERATOR' 
+              ? 'View ride history for all riders in the system'
+              : 'View your past rides and journey statistics'
+            }
           </p>
         </motion.div>
 
-        {/* Statistics Cards */}
-        {statistics && (
+        {/* Statistics Cards - Only show for riders */}
+        {statistics && user?.role !== 'OPERATOR' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -196,7 +206,22 @@ const RideHistory = () => {
           className="card p-6 mb-8"
         >
           <h2 className="text-xl font-bold mb-4 text-primary-900 dark:text-gray-100">Filters</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 ${user?.role === 'OPERATOR' ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4`}>
+            {user?.role === 'OPERATOR' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  User ID
+                </label>
+                <input
+                  type="number"
+                  name="userId"
+                  value={filters.userId}
+                  onChange={handleFilterChange}
+                  placeholder="Filter by user..."
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Start Date
@@ -306,6 +331,11 @@ const RideHistory = () => {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
+                      {user?.role === 'OPERATOR' && ride.userId && (
+                        <div className="px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 text-xs font-semibold">
+                          User #{ride.userId}
+                        </div>
+                      )}
                       <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         ride.status === 'COMPLETED' 
                           ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
@@ -353,7 +383,15 @@ const RideHistory = () => {
                         </div>
                       )}
                     </div>
-                    <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                    <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                      {user?.role === 'OPERATOR' && ride.bikeId && (
+                        <div>
+                          <div className="text-gray-600 dark:text-gray-400 mb-1">Bike ID</div>
+                          <div className="font-semibold text-gray-900 dark:text-gray-100 text-xs">
+                            {ride.bikeId}
+                          </div>
+                        </div>
+                      )}
                       {ride.startStationId && (
                         <div>
                           <div className="text-gray-600 dark:text-gray-400 mb-1">Start Station</div>

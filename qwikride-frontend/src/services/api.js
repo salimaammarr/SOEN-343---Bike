@@ -46,6 +46,9 @@ export const rideHistoryService = {
     if (filters.endDate) params.append("endDate", filters.endDate);
     if (filters.status) params.append("status", filters.status);
     if (filters.bikeType) params.append("bikeType", filters.bikeType);
+    if (filters.userId) params.append("userId", filters.userId);
+    if (filters.page) params.append("page", filters.page);
+    if (filters.size) params.append("size", filters.size);
 
     return api.get(`/history/all?${params.toString()}`);
   },

@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class RideHistoryFilterDTO {
+    private Long userId;
     private LocalDateTime startDate;
     private LocalDateTime endDate;
     private Long stationId;

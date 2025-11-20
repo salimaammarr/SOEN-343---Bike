@@ -111,17 +111,6 @@ const MapDashboard = () => {
     addConsoleMessage(`Selected station: ${station.name}`, 'info');
   };
 
-  const handleResetSystem = async () => {
-    if (window.confirm('Are you sure you want to reset the system to its initial state?')) {
-      try {
-        await loadData();
-        addConsoleMessage('System reset to initial state', 'success');
-      } catch {
-        addConsoleMessage('Failed to reset system', 'error');
-      }
-    }
-  };
-
   const handleReturn = async (bikeId, stationId) => {
     try {
       // Validate user is logged in
@@ -144,17 +133,23 @@ const MapDashboard = () => {
 
       const durationMinutes = Math.random() * 60 + 10;
       const distanceKm = Math.random() * 20 + 1;
-      await api.post('/bikes/return', {
-        bikeId,
-        returnStationId: stationId,
-        userId: user.id,
-        durationMinutes,
-        distanceKm
-      });
+      
+      // bikeId is UUID string, IDs are numbers
+      const payload = {
+        bikeId: String(bikeId), // Keep as string (UUID)
+        returnStationId: Number(stationId),
+        userId: Number(user.id),
+        durationMinutes: Number(durationMinutes.toFixed(2)),
+        distanceKm: Number(distanceKm.toFixed(2))
+      };
+
+      console.log('MapDashboard returning bike:', JSON.stringify(payload, null, 2));
+      await api.post('/bikes/return', payload);
       await loadData();
       addConsoleMessage('Bike returned successfully', 'success');
     } catch (error) {
-      const errorMsg = error.response?.data?.message || 'Failed to return bike';
+      console.error('MapDashboard return error:', error.response?.data);
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Failed to return bike';
       addConsoleMessage(errorMsg, 'error');
     }
   };
@@ -179,15 +174,44 @@ const MapDashboard = () => {
         return;
       }
 
-      await api.post('/bikes/reserve', {
-        stationId,
-        userId: user.id,
+      const payload = {
+        stationId: Number(stationId),
+        userId: Number(user.id),
         expiresAfterMinutes: 15
-      });
+      };
+
+      console.log('MapDashboard reserving bike:', payload);
+      await api.post('/bikes/reserve', payload);
       await loadData();
       addConsoleMessage('Bike reserved successfully (expires in 15 minutes)', 'success');
     } catch (error) {
-      const errorMsg = error.response?.data?.message || 'Failed to reserve bike';
+      console.error('MapDashboard reserve error:', error.response?.data);
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Failed to reserve bike';
+      addConsoleMessage(errorMsg, 'error');
+    }
+  };
+
+  const handleCheckout = async (bikeId) => {
+    try {
+      // Validate user is logged in
+      if (!user?.id) {
+        addConsoleMessage('Please log in to checkout a bike', 'error');
+        return;
+      }
+
+      // bikeId is UUID string, userId is a number
+      const payload = {
+        bikeId: String(bikeId),
+        userId: Number(user.id)
+      };
+
+      console.log('MapDashboard checking out bike:', JSON.stringify(payload, null, 2));
+      await api.post('/bikes/checkout', payload);
+      await loadData();
+      addConsoleMessage('Bike checked out successfully - enjoy your ride!', 'success');
+    } catch (error) {
+      console.error('MapDashboard checkout error:', error.response?.data);
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Failed to checkout bike';
       addConsoleMessage(errorMsg, 'error');
     }
   };
@@ -219,15 +243,20 @@ const MapDashboard = () => {
         return;
       }
 
-      await api.post('/bikes/move', {
-        bikeId,
-        newStationId: destinationStationId,
-        operatorId: user.id
-      });
+      // bikeId is UUID string, IDs are numbers
+      const payload = {
+        bikeId: String(bikeId), // Keep as string (UUID)
+        newStationId: Number(destinationStationId),
+        operatorId: Number(user.id)
+      };
+
+      console.log('MapDashboard moving bike:', JSON.stringify(payload, null, 2));
+      await api.post('/bikes/move', payload);
       await loadData();
       addConsoleMessage(`Bike moved from ${sourceStation.name} to ${destStation.name}`, 'success');
     } catch (error) {
-      const errorMsg = error.response?.data?.message || 'Failed to move bike';
+      console.error('MapDashboard move error:', error.response?.data);
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Failed to move bike';
       addConsoleMessage(errorMsg, 'error');
     }
   };
@@ -265,47 +294,6 @@ const MapDashboard = () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-4">
-            {/* Clean Information Bar */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">Role</div>
-                    <div className="font-semibold text-lg">{user?.role}</div>
-                  </div>
-                  <div className="w-px h-10 bg-gray-300 dark:bg-gray-600"></div>
-                  <div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">Username</div>
-                    <div className="font-semibold">{user?.username}</div>
-                  </div>
-                  {selectedStation && (
-                    <>
-                      <div className="w-px h-10 bg-gray-300 dark:bg-gray-600"></div>
-                      <div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">Selected Station</div>
-                        <div className="font-semibold">{selectedStation.name}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">Stats</div>
-                        <div className="font-semibold">
-                          {selectedStation.currentBikeCount}/{selectedStation.capacity} bikes, 
-                          {' '}{selectedStation.capacity - selectedStation.currentBikeCount} free docks
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-                {user?.role === 'OPERATOR' && (
-                  <button
-                    onClick={handleResetSystem}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Reset System
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* Map and Console Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Map Container */}
@@ -378,9 +366,11 @@ const MapDashboard = () => {
                 <StationDetailsPanel
                   station={selectedStation}
                   bikes={bikes.filter(b => b.stationId === selectedStation.id)}
+                  allBikes={bikes} // Pass all bikes so we can find user's IN_USE bike
                   onClose={() => setShowDetailsPanel(false)}
                   onReturn={handleReturn}
                   onReserve={handleReserve}
+                  onCheckout={handleCheckout}
                   onMove={handleMove}
                   onMarkMaintenance={handleMarkMaintenance}
                   onToggleStationStatus={handleToggleStationStatus}

@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 
 const StationDetailsPanel = ({
   station,
-  bikes,
+  bikes, // Bikes at this station
+  allBikes, // All bikes in the system
   onClose,
   onReturn,
   onReserve,
+  onCheckout,
   onMove,
   onMarkMaintenance,
   onToggleStationStatus,
@@ -228,9 +230,28 @@ const StationDetailsPanel = ({
                     </button>
                     <button
                       onClick={() => {
-                        // This would need bike ID from user's current ride
-                        const userBike = bikes.find(b => b.status === 'IN_USE');
-                        if (userBike) onReturn(userBike.id, station.id);
+                        // Checkout an available bike or a reserved bike at this station
+                        const bikeToCheckout = bikes.find(b => b.status === 'RESERVED' || b.status === 'AVAILABLE');
+                        if (bikeToCheckout) {
+                          onCheckout(bikeToCheckout.id);
+                        } else {
+                          alert('No bikes available to checkout at this station.');
+                        }
+                      }}
+                      disabled={(availableBikes.length === 0 && reservedBikes.length === 0) || station.status === 'OUT_OF_SERVICE'}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      Checkout Bike
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Find the user's bike that is currently IN_USE from all bikes
+                        const userBike = allBikes?.find(b => b.status === 'IN_USE') || allBikes?.find(b => b.status === 'RESERVED');
+                        if (userBike) {
+                          onReturn(userBike.id, station.id);
+                        } else {
+                          alert('No active bike to return. Please reserve or checkout a bike first.');
+                        }
                       }}
                       disabled={freeDocks === 0 || station.status === 'OUT_OF_SERVICE'}
                       className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"

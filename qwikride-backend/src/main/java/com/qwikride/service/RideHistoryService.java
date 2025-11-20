@@ -190,8 +190,11 @@ public class RideHistoryService {
      * Uses Builder Pattern.
      */
     private RideHistoryFilterCriteria buildFilterCriteria(Long userId, RideHistoryFilterDTO filter) {
+        // Use userId from filter if provided, otherwise use the parameter
+        Long effectiveUserId = (filter != null && filter.getUserId() != null) ? filter.getUserId() : userId;
+        
         RideHistoryFilterCriteria.RideHistoryFilterCriteriaBuilder builder = RideHistoryFilterCriteria.builder()
-                .userId(userId);
+                .userId(effectiveUserId);
 
         if (filter != null) {
             if (filter.getStartDate() != null) {

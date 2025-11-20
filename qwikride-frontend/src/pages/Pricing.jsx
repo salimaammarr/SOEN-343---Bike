@@ -391,6 +391,23 @@ const Pricing = () => {
     activeEntry && ['PAID', 'ADJUSTED'].includes(activeEntry.paymentStatus)
   );
 
+  // Helper function to convert payment error codes to user-friendly messages
+  const getPaymentErrorMessage = (errorCode) => {
+    const errorMessages = {
+      'INSUFFICIENT_FUNDS': 'Payment failed: Insufficient funds. Please use a different payment method.',
+      'CARD_EXPIRED': 'Payment failed: Your payment method has expired. Please update your payment information.',
+      'INVALID_CARD': 'Payment failed: Invalid payment method. Please check your payment information.',
+      'CARD_DECLINED': 'Payment failed: Your payment was declined. Please contact your bank or use a different payment method.',
+      'FRAUD_SUSPECTED': 'Payment failed: Transaction flagged for security review. Please contact support.',
+      'NETWORK_ERROR': 'Payment failed: Network error occurred. Please try again.',
+      'GATEWAY_TIMEOUT': 'Payment failed: Payment gateway timeout. Please try again.',
+      'TEMPORARY_ERROR': 'Payment failed: Temporary error occurred. Please try again in a few moments.',
+      'INVALID_AMOUNT': 'Payment failed: Invalid payment amount.',
+      'AMOUNT_EXCEEDS_LIMIT': 'Payment failed: Amount exceeds payment limit ($10,000).',
+    };
+    return errorMessages[errorCode] || `Payment failed: ${errorCode}. Please try again or contact support.`;
+  };
+
   const handleSettlePayment = async () => {
     if (!activeEntry) {
       return;
@@ -403,10 +420,10 @@ const Pricing = () => {
         paymentMethodToken: 'saved-default',
       });
       if (data?.success) {
-        setBillingActionMessage('Payment processed successfully.');
+        setBillingActionMessage(`Payment processed successfully! Transaction ID: ${data.transactionId}`);
       } else {
         setBillingActionError(
-          data?.failureReason ? `Payment failed: ${data.failureReason}` : 'Payment could not be processed.'
+          data?.failureReason ? getPaymentErrorMessage(data.failureReason) : 'Payment could not be processed.'
         );
       }
       await fetchBillingHistory();

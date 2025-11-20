@@ -9,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.validation.Valid;
 import java.util.List;
 
 /**
@@ -90,6 +89,7 @@ public class RideHistoryController {
     @GetMapping("/all")
     @PreAuthorize("hasAuthority('OPERATOR')")
     public ResponseEntity<List<RideHistoryResponseDTO>> getAllRideHistories(
+            @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) Long stationId,
@@ -100,6 +100,7 @@ public class RideHistoryController {
             @RequestParam(required = false, defaultValue = "20") Integer size) {
         
         RideHistoryFilterDTO.RideHistoryFilterDTOBuilder builder = RideHistoryFilterDTO.builder()
+                .userId(userId)
                 .page(page)
                 .size(size);
         
