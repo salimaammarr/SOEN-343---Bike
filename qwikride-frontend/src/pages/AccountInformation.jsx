@@ -8,6 +8,7 @@ import api from '../services/api';
 const AccountInformation = () => {
   const { user, toggleRole } = useAuth();
   const [accountData, setAccountData] = useState(null);
+  const [tierProgress, setTierProgress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toggling, setToggling] = useState(false);
@@ -27,8 +28,14 @@ const AccountInformation = () => {
       try {
         setLoading(true);
         setError('');
-        const response = await api.get('/auth/account');
-        setAccountData(response.data);
+        const [accountResponse, progressResponse] = await Promise.all([
+          api.get('/auth/account'),
+          api.get('/auth/account/tier-progress').catch(() => null) // Optional, don't fail if it errors
+        ]);
+        setAccountData(accountResponse.data);
+        if (progressResponse?.data) {
+          setTierProgress(progressResponse.data);
+        }
       } catch (err) {
         console.error('Failed to fetch account data:', err);
         setError('Failed to load account information. Please refresh the page.');
@@ -222,6 +229,38 @@ const AccountInformation = () => {
                   {account?.tier === 'BRONZE' && '5% discount on trips'}
                   {account?.tier === 'ENTRY' && 'No perks yet - start riding to unlock rewards!'}
                 </p>
+                
+                {/* Tier Progress */}
+                {tierProgress && tierProgress.nextTier && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <label className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2 block">
+                      Progress to {tierProgress.nextTier}
+                    </label>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${tierProgress.progressPercentage}%` }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="bg-gradient-to-r from-primary-600 to-primary-800 h-3 rounded-full"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {tierProgress.progressMessage}
+                    </p>
+                    {tierProgress.tripsRequired > 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                        {tierProgress.tripsCompleted} / {tierProgress.tripsRequired} trips completed
+                      </p>
+                    )}
+                  </div>
+                )}
+                {tierProgress && !tierProgress.nextTier && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-sm text-green-600 dark:text-green-400 font-semibold">
+                      🎉 You've reached the highest tier!
+                    </p>
+                  </div>
+                )}
               </div>
               
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700">

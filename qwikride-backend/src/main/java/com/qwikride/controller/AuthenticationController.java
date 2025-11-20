@@ -5,6 +5,7 @@ import com.qwikride.dto.LoginResponseDTO;
 import com.qwikride.dto.RegistrationRequestDTO;
 import com.qwikride.dto.RoleToggleRequestDTO;
 import com.qwikride.dto.UserAccountDTO;
+import com.qwikride.dto.TierProgressDTO;
 import com.qwikride.service.AuthenticationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -49,10 +50,22 @@ public class AuthenticationController {
     }
 
     @GetMapping("/account")
+    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserAccountDTO> getAccount() {
         try {
             UserAccountDTO account = authenticationService.getCurrentUserAccount();
             return ResponseEntity.ok(account);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(401).build();
+        }
+    }
+
+    @GetMapping("/account/tier-progress")
+    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
+    public ResponseEntity<TierProgressDTO> getTierProgress() {
+        try {
+            TierProgressDTO progress = authenticationService.getTierProgress();
+            return ResponseEntity.ok(progress);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(401).build();
         }

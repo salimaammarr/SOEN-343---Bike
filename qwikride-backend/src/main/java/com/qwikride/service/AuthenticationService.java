@@ -217,4 +217,21 @@ public class AuthenticationService {
                 .pendingBalance(user.getPendingBalance() != null ? user.getPendingBalance() : java.math.BigDecimal.ZERO)
                 .build();
     }
+
+    /**
+     * Get tier progress information for the current user.
+     */
+    public com.qwikride.dto.TierProgressDTO getTierProgress() {
+        org.springframework.security.core.Authentication authentication = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        
+        if (authentication == null) {
+            throw new IllegalArgumentException("User not authenticated");
+        }
+
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        return loyaltyTierService.getTierProgress(user.getId());
+    }
 }

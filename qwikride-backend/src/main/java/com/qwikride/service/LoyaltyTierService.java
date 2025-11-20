@@ -302,5 +302,111 @@ public class LoyaltyTierService {
             return previousTier;
         }
     }
+
+    /**
+     * Get tier progress information for a user.
+     */
+    public com.qwikride.dto.TierProgressDTO getTierProgress(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        MembershipStatus currentTier = user.getMembershipStatus();
+        LocalDateTime oneYearAgo = LocalDateTime.now().minusYears(1);
+        LocalDateTime threeMonthsAgo = LocalDateTime.now().minusMonths(3);
+
+        // Count trips in last year
+        long tripsCompleted = countCompletedTrips(userId, oneYearAgo, LocalDateTime.now());
+        boolean hasMissedReservations = !checkNoMissedReservations(userId, oneYearAgo);
+        boolean hasCancelledRides = !checkAllBikesReturned(userId, oneYearAgo);
+        long successfulReservations = countSuccessfulReservations(userId, oneYearAgo);
+
+        MembershipStatus nextTier = getNextTier(currentTier);
+        String progressMessage = "";
+        double progressPercentage = 0.0;
+        int tripsRequired = 0;
+        int reservationsRequired = 0;
+
+        if (nextTier == null) {
+            // Already at max tier
+            progressMessage = "You've reached the highest tier!";
+            progressPercentage = 100.0;
+        } else {
+            switch (nextTier) {
+                case BRONZE:
+                    tripsRequired = 10;
+                    if (hasMissedReservations) {
+                        progressMessage = "Complete all reservations to unlock Bronze tier";
+                        progressPercentage = 0.0;
+                    } else if (hasCancelledRides) {
+                        progressMessage = "Return all bikes successfully to unlock Bronze tier";
+                        progressPercentage = 0.0;
+                    } else {
+                        int progress = (int) Math.min(100, (tripsCompleted * 100.0 / tripsRequired));
+                        progressPercentage = progress;
+                        progressMessage = String.format("%d / %d trips completed", tripsCompleted, tripsRequired);
+                    }
+                    break;
+                case SILVER:
+                    reservationsRequired = 5;
+                    if (!meetsBronzeRequirements(userId, oneYearAgo)) {
+                        progressMessage = "Meet Bronze tier requirements first";
+                        progressPercentage = 0.0;
+                    } else {
+                        // Check monthly requirement
+                        boolean meetsMonthly = checkMonthlyTripRequirement(userId, threeMonthsAgo, 5);
+                        if (!meetsMonthly) {
+                            progressMessage = "Complete 5 trips per month for the last 3 months";
+                            progressPercentage = 50.0;
+                        } else if (successfulReservations < reservationsRequired) {
+                            int progress = (int) Math.min(100, (successfulReservations * 100.0 / reservationsRequired));
+                            progressPercentage = progress;
+                            progressMessage = String.format("%d / %d successful reservations", successfulReservations, reservationsRequired);
+                        } else {
+                            progressMessage = "Almost there! Keep up the good work.";
+                            progressPercentage = 90.0;
+                        }
+                    }
+                    break;
+                case GOLD:
+                    if (!meetsSilverRequirements(userId, oneYearAgo, threeMonthsAgo)) {
+                        progressMessage = "Meet Silver tier requirements first";
+                        progressPercentage = 0.0;
+                    } else {
+                        // Check weekly requirement
+                        boolean meetsWeekly = checkWeeklyTripRequirement(userId, threeMonthsAgo, 5);
+                        if (meetsWeekly) {
+                            progressMessage = "You're eligible for Gold tier!";
+                            progressPercentage = 100.0;
+                        } else {
+                            progressMessage = "Complete 5 trips per week for the last 3 months";
+                            progressPercentage = 75.0;
+                        }
+                    }
+                    break;
+            }
+        }
+
+        return com.qwikride.dto.TierProgressDTO.builder()
+                .currentTier(currentTier)
+                .nextTier(nextTier)
+                .tripsCompleted((int) tripsCompleted)
+                .tripsRequired(tripsRequired)
+                .hasMissedReservations(hasMissedReservations)
+                .hasCancelledRides(hasCancelledRides)
+                .successfulReservations((int) successfulReservations)
+                .reservationsRequired(reservationsRequired)
+                .progressMessage(progressMessage)
+                .progressPercentage(progressPercentage)
+                .build();
+    }
+
+    private MembershipStatus getNextTier(MembershipStatus current) {
+        return switch (current) {
+            case ENTRY -> MembershipStatus.BRONZE;
+            case BRONZE -> MembershipStatus.SILVER;
+            case SILVER -> MembershipStatus.GOLD;
+            case GOLD -> null; // Max tier
+        };
+    }
 }
 

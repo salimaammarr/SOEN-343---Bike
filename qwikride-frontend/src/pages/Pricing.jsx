@@ -112,7 +112,7 @@ const createEmptyPlanForm = () => ({
   baseFee: '',
   perMinuteRate: '',
   ebikeSurcharge: '',
-  membershipTier: 'NONE',
+  membershipTier: 'ENTRY',
   cityId: '',
   effectiveFrom: '',
   effectiveTo: '',
@@ -120,7 +120,7 @@ const createEmptyPlanForm = () => ({
   publish: true,
 });
 
-const membershipOptions = ['NONE', 'STANDARD', 'PREMIUM'];
+const membershipOptions = ['ENTRY', 'BRONZE', 'SILVER', 'GOLD'];
 
 const Pricing = () => {
   const { user, updateUser } = useAuth();
