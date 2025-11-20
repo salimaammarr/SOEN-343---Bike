@@ -36,10 +36,13 @@ const BikeManagement = () => {
         api.get('/bikes'),
         api.get('/stations')
       ]);
-      setBikes(bikesResponse.data);
-      setStations(stationsResponse.data);
+      // Handle paginated response (if content exists) or direct array
+      const bikesData = bikesResponse.data?.content || bikesResponse.data || [];
+      setBikes(Array.isArray(bikesData) ? bikesData : []);
+      setStations(stationsResponse.data || []);
       setError('');
-    } catch {
+    } catch (err) {
+      console.error('Failed to load data:', err);
       setError('Failed to load data. Please refresh the page.');
     } finally {
       setLoading(false);

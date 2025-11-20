@@ -51,8 +51,10 @@ const RideHistory = () => {
       const response = user.role === 'OPERATOR' 
         ? await rideHistoryService.getAllRideHistories(filters)
         : await rideHistoryService.getUserRideHistory(user.id, filters);
-        
-      setRideHistory(response.data || []);
+      
+      // Handle paginated response (if content exists) or direct array
+      const historyData = response.data?.content || response.data || [];
+      setRideHistory(Array.isArray(historyData) ? historyData : []);
     } catch (err) {
       if (err.response?.status === 403) {
         setError('Access denied. Please log in again.');
