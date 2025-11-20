@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { motion } from 'framer-motion';
 import { PAGE_VARIANTS } from '../constants/animations';
 import { GridBackground, AnimatedBlob, LoadingSpinner, Alert } from '../components';
-import { api } from '../services/api';
+import api from '../services/api';
 
 const AccountInformation = () => {
   const { user, toggleRole } = useAuth();
