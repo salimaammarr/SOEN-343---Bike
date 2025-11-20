@@ -23,6 +23,7 @@ public class BikeService {
     private final EventBus eventBus;
     private final BikeLocationPort bikeLocationPort;
     private final BikeFactoryRegistry bikeFactoryRegistry;
+    private final FlexDollarsService flexDollarsService;
 
     @Transactional
     @SuppressWarnings("null")
@@ -114,6 +115,12 @@ public class BikeService {
 
         // Update station count
         incrementStationCount(returnStationId);
+        
+        // Refresh station to get updated count for flex dollars check
+        BikeStation updatedStation = getStationByIdOrThrow(returnStationId, "Return station not found");
+        
+        // Award flex dollars if station is below 25% capacity
+        flexDollarsService.awardFlexDollarsIfEligible(updatedStation, userId);
 
         // Publish trip completion event for pricing/billing (PricingService will calculate actual cost)
         eventBus.publish(new TripEndedEvent(bikeId, userId, returnStationId, durationMinutes, distanceKm, 0.0));
