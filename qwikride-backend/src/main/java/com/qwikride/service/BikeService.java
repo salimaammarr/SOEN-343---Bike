@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -175,7 +178,17 @@ public class BikeService {
     }
 
     public List<Bike> getAllBikes() {
-        return bikeRepository.findAll();
+        List<Bike> allBikes = bikeRepository.findAll();
+        // Deduplicate by ID to prevent any duplicates
+        Set<UUID> seenIds = new LinkedHashSet<>();
+        return allBikes.stream()
+                .filter(bike -> {
+                    if (bike == null || bike.getId() == null) return false;
+                    if (seenIds.contains(bike.getId())) return false;
+                    seenIds.add(bike.getId());
+                    return true;
+                })
+                .collect(Collectors.toList());
     }
 
     public Optional<Bike> getBikeById(UUID bikeId) {

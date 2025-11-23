@@ -7,8 +7,7 @@ import com.qwikride.prc.repository.PricingPlanVersionRepository;
 import com.qwikride.repository.*;
 import com.qwikride.factory.BikeFactory;
 import com.qwikride.factory.BikeFactoryRegistry;
-import com.qwikride.service.PricingService;
-import com.qwikride.service.RideHistoryService;
+import com.qwikride.service.CleanupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -34,36 +33,43 @@ public class DataSeeder implements CommandLineRunner {
     private final PricingPlanVersionRepository pricingPlanVersionRepository;
     private final PasswordEncoder passwordEncoder;
     private final BikeFactoryRegistry bikeFactoryRegistry;
-    private final RideHistoryService rideHistoryService;
-    private final PricingService pricingService;
+    private final CleanupService cleanupService;
 
     @Override
     @Transactional
     public void run(String... args) {
         log.info("🌱 Starting data seeding...");
 
+        // Cleanup: Keep only 3 stations and delete the rest
+        cleanupService.keepOnlyThreeStations();
+
         // Create operator
-        User operator = createOperator();
+        createOperator();
 
-        // Create test riders
-        List<User> riders = createTestRiders();
+        // Create bike stations (will only create if they don't exist)
+        createBikeStations();
 
-        // Create bike stations
-        List<BikeStation> stations = createBikeStations();
+        // Ensure we have exactly 3 stations
+        List<BikeStation> allStations = bikeStationRepository.findAll();
+        if (allStations.size() > 3) {
+            log.warn("⚠️  More than 3 stations found. Running cleanup again...");
+            cleanupService.keepOnlyThreeStations();
+            allStations = bikeStationRepository.findAll();
+        }
 
-        // Create bikes
-        List<Bike> bikes = createBikes(stations);
+        // Create bikes for the remaining stations
+        List<Bike> bikes = createBikes(allStations);
 
-        // Create sample ride history
-        createSampleRideHistory(riders, bikes, stations);
+        // Create test riders with specific tier progression scenarios
+        List<User> testRiders = createTierTestUsers(bikes, allStations);
 
         // Create sample pricing plans
         createPricingPlans();
 
         log.info("✅ Data seeding completed successfully!");
         log.info("📊 Summary:");
-        log.info("   - {} users created (1 operator, {} riders)", riders.size() + 1, riders.size());
-        log.info("   - {} bike stations created", stations.size());
+        log.info("   - {} users created (1 operator, {} test riders)", testRiders.size() + 1, testRiders.size());
+        log.info("   - {} bike stations (kept 3)", allStations.size());
         log.info("   - {} bikes created", bikes.size());
     }
 
@@ -86,64 +92,181 @@ public class DataSeeder implements CommandLineRunner {
         return userRepository.findByUsername("operator").orElse(null);
     }
 
-    private List<User> createTestRiders() {
+    /**
+     * Create 3 test users for live demo - each just 1 ride away from next tier:
+     * 1. Entry → Bronze: 10 trips in last year (needs 1 more to reach 11)
+     * 2. Bronze → Silver: 11 trips in last year, 4 trips in current month (needs 1 more to reach 5/month)
+     * 3. Silver → Gold: 11 trips in last year, 5 trips/month, 4 trips in current week (needs 1 more to reach 5/week)
+     */
+    private List<User> createTierTestUsers(List<Bike> bikes, List<BikeStation> stations) {
         List<User> riders = new ArrayList<>();
-        String[][] riderData = {
-                { "John Doe", "john@example.com", "johndoe", "password123", "123 Main St, Montreal" },
-                { "Jane Smith", "jane@example.com", "janesmith", "password123", "456 Oak Ave, Montreal" },
-                { "Mike Johnson", "mike@example.com", "mikejohnson", "password123", "789 Pine Rd, Montreal" },
-                { "Sarah Williams", "sarah@example.com", "sarahw", "password123", "321 Elm St, Montreal" },
-                { "David Brown", "david@example.com", "davidbrown", "password123", "654 Maple Dr, Montreal" }
-        };
+        LocalDateTime now = LocalDateTime.now();
+        Random random = new Random();
 
-        for (String[] data : riderData) {
-            if (!userRepository.existsByUsername(data[2])) {
-                User rider = new User();
-                rider.setFullName(data[0]);
-                rider.setEmail(data[1]);
-                rider.setUsername(data[2]);
-                rider.setPasswordHash(passwordEncoder.encode(data[3]));
-                rider.setAddress(data[4]);
-                rider.setPaymentInfo("Credit Card ending in 1234");
-                rider.setRole(User.UserRole.RIDER);
-                rider.setMembershipStatus(randomMembership());
+        // User 1: Entry → Bronze (10 trips in last year, needs 1 more to reach 11)
+        User entryUser = createOrResetDemoUser("demoentry", "Demo Entry User", "demoentry@test.com", 
+                "password123", "123 Entry St", MembershipStatus.ENTRY);
+        riders.add(entryUser);
+        // Delete existing rides for this user
+        rideHistoryRepository.deleteAll(rideHistoryRepository.findByUserIdOrderByStartTimeDesc(entryUser.getId()));
+        // Create 10 trips in last year (older than 3 months to avoid affecting monthly counts)
+        createRidesForUser(entryUser, bikes, stations, 10, now.minusMonths(6), now.minusMonths(4), random);
+        log.info("✅ Created Entry→Bronze demo user: demoentry (10 trips, needs 1 more to reach Bronze)");
 
-                riders.add(userRepository.save(rider));
-                log.info("✅ Created rider: {} (username: {}, password: {})", data[0], data[2], data[3]);
-            } else {
-                userRepository.findByUsername(data[2]).ifPresent(riders::add);
-            }
+        // User 2: Bronze → Silver (11 trips in last year, 4 trips in current month, needs 1 more)
+        User bronzeUser = createOrResetDemoUser("demobronze", "Demo Bronze User", "demobronze@test.com", 
+                "password123", "456 Bronze Ave", MembershipStatus.BRONZE);
+        riders.add(bronzeUser);
+        // Delete existing rides for this user
+        rideHistoryRepository.deleteAll(rideHistoryRepository.findByUserIdOrderByStartTimeDesc(bronzeUser.getId()));
+        // Create 11 trips in last year (older)
+        createRidesForUser(bronzeUser, bikes, stations, 7, now.minusMonths(6), now.minusMonths(4), random);
+        // Create 5 trips in month 1 of last 3 months
+        createRidesForUser(bronzeUser, bikes, stations, 5, now.minusMonths(3), now.minusMonths(2), random);
+        // Create 5 trips in month 2
+        createRidesForUser(bronzeUser, bikes, stations, 5, now.minusMonths(2), now.minusMonths(1), random);
+        // Create 4 trips in current month (month 3) - needs 1 more
+        createRidesForUser(bronzeUser, bikes, stations, 4, now.minusMonths(1), now, random);
+        log.info("✅ Created Bronze→Silver demo user: demobronze (11 trips, 4 in current month, needs 1 more)");
+
+        // User 3: Silver → Gold (11 trips in last year, 5 trips/month, 4 trips in current week, needs 1 more)
+        User silverUser = createOrResetDemoUser("demosilver", "Demo Silver User", "demosilver@test.com", 
+                "password123", "789 Silver Rd", MembershipStatus.SILVER);
+        riders.add(silverUser);
+        // Delete existing rides for this user
+        rideHistoryRepository.deleteAll(rideHistoryRepository.findByUserIdOrderByStartTimeDesc(silverUser.getId()));
+        // Create 11 trips in last year (older)
+        createRidesForUser(silverUser, bikes, stations, 11, now.minusMonths(6), now.minusMonths(4), random);
+        // Create 5 trips/month for last 3 months
+        createRidesForUser(silverUser, bikes, stations, 5, now.minusMonths(3), now.minusMonths(2), random);
+        createRidesForUser(silverUser, bikes, stations, 5, now.minusMonths(2), now.minusMonths(1), random);
+        createRidesForUser(silverUser, bikes, stations, 5, now.minusMonths(1), now, random);
+        // Create 5 trips in each of the last 11 weeks (meets requirement)
+        LocalDateTime weekStart = now.minusWeeks(12);
+        for (int week = 0; week < 11; week++) {
+            LocalDateTime weekEnd = weekStart.plusWeeks(1);
+            createRidesForUser(silverUser, bikes, stations, 5, weekStart, weekEnd, random);
+            weekStart = weekEnd;
         }
+        // Create 4 trips in current week (week 12) - needs 1 more
+        createRidesForUser(silverUser, bikes, stations, 4, weekStart, now, random);
+        log.info("✅ Created Silver→Gold demo user: demosilver (5 trips/month, 4 in current week, needs 1 more)");
+
         return riders;
     }
 
-    private MembershipStatus randomMembership() {
-        MembershipStatus[] tiers = { MembershipStatus.ENTRY, MembershipStatus.BRONZE, MembershipStatus.SILVER, MembershipStatus.GOLD };
-        return tiers[new Random().nextInt(tiers.length)];
+    private User createUserIfNotExists(String username, String fullName, String email, 
+                                      String password, String address, MembershipStatus tier) {
+        if (!userRepository.existsByUsername(username)) {
+            User user = new User();
+            user.setFullName(fullName);
+            user.setEmail(email);
+            user.setUsername(username);
+            user.setPasswordHash(passwordEncoder.encode(password));
+            user.setAddress(address);
+            user.setPaymentInfo("Credit Card ending in 1234");
+            user.setRole(User.UserRole.RIDER);
+            user.setMembershipStatus(tier);
+            return userRepository.save(user);
+        }
+        return userRepository.findByUsername(username).orElse(null);
+    }
+
+    /**
+     * Create or reset a demo user - deletes existing rides to ensure clean state
+     */
+    private User createOrResetDemoUser(String username, String fullName, String email, 
+                                      String password, String address, MembershipStatus tier) {
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null) {
+            user = new User();
+            user.setFullName(fullName);
+            user.setEmail(email);
+            user.setUsername(username);
+            user.setPasswordHash(passwordEncoder.encode(password));
+            user.setAddress(address);
+            user.setPaymentInfo("Credit Card ending in 1234");
+            user.setRole(User.UserRole.RIDER);
+            user.setMembershipStatus(tier);
+            user = userRepository.save(user);
+        } else {
+            // Reset tier status
+            user.setMembershipStatus(tier);
+            userRepository.save(user);
+        }
+        return user;
+    }
+
+    private void createRidesForUser(User user, List<Bike> bikes, List<BikeStation> stations, 
+                                    int count, LocalDateTime startTime, LocalDateTime endTime, Random random) {
+        if (bikes.isEmpty() || stations.isEmpty()) return;
+
+        for (int i = 0; i < count; i++) {
+            Bike bike = bikes.get(random.nextInt(bikes.size()));
+            BikeStation startStation = stations.get(random.nextInt(stations.size()));
+            BikeStation endStation = stations.get(random.nextInt(stations.size()));
+
+            while (endStation.getId().equals(startStation.getId())) {
+                endStation = stations.get(random.nextInt(stations.size()));
+            }
+
+            // Random time within the range
+            long secondsBetween = java.time.Duration.between(startTime, endTime).getSeconds();
+            LocalDateTime rideStart = startTime.plusSeconds(random.nextInt((int) Math.max(1, secondsBetween)));
+            double durationMinutes = 15 + random.nextDouble() * 60;
+            double distanceKm = 2 + random.nextDouble() * 8;
+            double baseFee = (bike.getType() == BikeType.E_BIKE) ? 3.00 : 2.00;
+            double cost = baseFee + (durationMinutes * 0.25);
+
+            RideHistory rideHistory = RideHistory.builder()
+                    .userId(user.getId())
+                    .bikeId(bike.getId())
+                    .startStationId(startStation.getId())
+                    .endStationId(endStation.getId())
+                    .startTime(rideStart)
+                    .endTime(rideStart.plusMinutes((long) durationMinutes))
+                    .durationMinutes(durationMinutes)
+                    .distanceKm(distanceKm)
+                    .cost(cost)
+                    .status(RideHistory.RideStatus.COMPLETED)
+                    .bikeType(bike.getType() != null ? bike.getType().name() : "STANDARD")
+                    .build();
+
+            rideHistoryRepository.save(rideHistory);
+        }
     }
 
     private List<BikeStation> createBikeStations() {
         List<BikeStation> stations = new ArrayList<>();
+        // Only create 3 stations
         Object[][] stationData = {
                 { "Downtown Central", "123 Main Street, Downtown", 25 },
                 { "University Campus", "456 University Ave, Campus", 30 },
-                { "Shopping Mall", "789 Commerce Blvd, Shopping District", 20 },
-                { "Park & Ride", "321 Transit Way, Suburb", 15 },
-                { "Waterfront", "555 Harbor Blvd, Waterfront", 18 }
+                { "Shopping Mall", "789 Commerce Blvd, Shopping District", 20 }
         };
 
         for (Object[] data : stationData) {
-            BikeStation station = new BikeStation();
-            station.setName((String) data[0]);
-            station.setAddress((String) data[1]);
-            station.setCapacity((Integer) data[2]);
-            station.setCurrentBikeCount(0);
-            station.setStatus(BikeStation.StationStatus.ACTIVE);
+            // Check if station with this name already exists
+            boolean exists = bikeStationRepository.findAll().stream()
+                    .anyMatch(s -> s.getName().equals(data[0]));
+            
+            if (!exists) {
+                BikeStation station = new BikeStation();
+                station.setName((String) data[0]);
+                station.setAddress((String) data[1]);
+                station.setCapacity((Integer) data[2]);
+                station.setCurrentBikeCount(0);
+                station.setStatus(BikeStation.StationStatus.ACTIVE);
 
-            stations.add(bikeStationRepository.save(station));
-            log.info("✅ Created station: {} (capacity: {})", data[0], data[2]);
+                stations.add(bikeStationRepository.save(station));
+                log.info("✅ Created station: {} (capacity: {})", data[0], data[2]);
+            } else {
+                log.info("⏭️  Station already exists: {}", data[0]);
+            }
         }
-        return stations;
+        
+        // Return all stations (existing + newly created)
+        return bikeStationRepository.findAll();
     }
 
     private List<Bike> createBikes(List<BikeStation> stations) {
@@ -188,54 +311,6 @@ public class DataSeeder implements CommandLineRunner {
         return bikes;
     }
 
-    @SuppressWarnings("null")
-    private void createSampleRideHistory(List<User> riders, List<Bike> bikes, List<BikeStation> stations) {
-        if (riders.isEmpty() || bikes.isEmpty() || stations.isEmpty()) {
-            log.warn("⚠️  Cannot create ride history - missing required data");
-            return;
-        }
-
-        Random random = new Random();
-        int ridesToCreate = 30; // Create 30 sample rides
-
-        for (int i = 0; i < ridesToCreate; i++) {
-            User rider = riders.get(random.nextInt(riders.size()));
-            Bike bike = bikes.get(random.nextInt(bikes.size()));
-            BikeStation startStation = stations.get(random.nextInt(stations.size()));
-            BikeStation endStation = stations.get(random.nextInt(stations.size()));
-
-            // Ensure different stations for start and end
-            while (endStation.getId().equals(startStation.getId())) {
-                endStation = stations.get(random.nextInt(stations.size()));
-            }
-
-            // Create ride history entry
-            LocalDateTime startTime = LocalDateTime.now().minusDays(random.nextInt(30)).minusHours(random.nextInt(24));
-            double durationMinutes = 15 + random.nextDouble() * 60; // 15-75 minutes
-            double distanceKm = 2 + random.nextDouble() * 8; // 2-10 km// Simple cost calculation for sample data: base fee + per-minute rate
-            double baseFee = (bike.getType() == BikeType.E_BIKE) ? 3.00 : 2.00;
-            double perMinuteRate = 0.25;
-            double cost = baseFee + (durationMinutes * perMinuteRate);
-
-            RideHistory rideHistory = RideHistory.builder()
-                    .userId(rider.getId())
-                    .bikeId(bike.getId())
-                    .startStationId(startStation.getId())
-                    .endStationId(endStation.getId())
-                    .startTime(startTime)
-                    .endTime(startTime.plusMinutes((long) durationMinutes))
-                    .durationMinutes(durationMinutes)
-                    .distanceKm(distanceKm)
-                    .cost(cost)
-                    .status(RideHistory.RideStatus.COMPLETED)
-                    .bikeType(bike.getType() != null ? bike.getType().name() : "STANDARD")
-                    .build();
-
-            rideHistoryRepository.save(rideHistory);
-        }
-
-        log.info("✅ Created {} sample ride history entries", ridesToCreate);
-    }
 
     private void createPricingPlans() {
         // Delete all plans with old names (Standard Daily, Premium Member) or any non-tier names

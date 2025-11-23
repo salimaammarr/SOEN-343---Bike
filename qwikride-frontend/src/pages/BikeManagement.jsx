@@ -1,17 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import ReserveBikeModal from '../components/ReserveBikeModal';
+import ReturnBikeModal from '../components/ReturnBikeModal';
+import MoveBikeModal from '../components/MoveBikeModal';
 
 const BikeManagement = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [bikes, setBikes] = useState([]);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedStation, setSelectedStation] = useState(null);
   const [showReserveModal, setShowReserveModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -19,6 +22,28 @@ const BikeManagement = () => {
   const [returnStationId, setReturnStationId] = useState('');
   const [reservationData, setReservationData] = useState({ stationId: '', userId: '', expiresAfterMinutes: 15 });
   const [moveData, setMoveData] = useState({ bikeId: '', newStationId: '', operatorId: '' });
+  
+  // Use refs to prevent duplicate API calls
+  const isLoadingRef = useRef(false);
+  const lastLoadTimeRef = useRef(0);
+
+  // Robust deduplication function using Map for O(1) lookup
+  const deduplicateById = useCallback((items, idKey = 'id') => {
+    if (!Array.isArray(items)) return [];
+    const seen = new Map();
+    const result = [];
+    
+    for (const item of items) {
+      if (!item || !item[idKey]) continue; // Skip invalid items
+      const id = item[idKey];
+      if (!seen.has(id)) {
+        seen.set(id, true);
+        result.push(item);
+      }
+    }
+    
+    return result;
+  }, []);
 
   // Update userId in forms when user changes
   useEffect(() => {
@@ -28,64 +53,91 @@ const BikeManagement = () => {
     }
   }, [user?.id]);
 
+  // Load data on mount
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    // Prevent concurrent loads
+    if (isLoadingRef.current) {
+      console.log('Load already in progress, skipping...');
+      return;
+    }
+
+    // Throttle loads to max once per 2 seconds
+    const now = Date.now();
+    if (now - lastLoadTimeRef.current < 2000) {
+      console.log('Load throttled, skipping...');
+      return;
+    }
+
     try {
+      isLoadingRef.current = true;
+      lastLoadTimeRef.current = now;
       setLoading(true);
+      
+      console.log('Loading data...');
       const [bikesResponse, stationsResponse] = await Promise.all([
         api.get('/bikes'),
         api.get('/stations')
       ]);
+      
       // Handle paginated response (if content exists) or direct array
       const bikesData = bikesResponse.data?.content || bikesResponse.data || [];
-      setBikes(Array.isArray(bikesData) ? bikesData : []);
-      setStations(stationsResponse.data || []);
+      const stationsData = stationsResponse.data || [];
+      
+      // Properly deduplicate by ID
+      const uniqueBikes = deduplicateById(Array.isArray(bikesData) ? bikesData : []);
+      const uniqueStations = deduplicateById(Array.isArray(stationsData) ? stationsData : []);
+      
+      console.log(`Loaded ${uniqueBikes.length} unique bikes, ${uniqueStations.length} unique stations`);
+      
+      setBikes(uniqueBikes);
+      setStations(uniqueStations);
       setError('');
     } catch (err) {
       console.error('Failed to load data:', err);
       setError('Failed to load data. Please refresh the page.');
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
-  };
+  }, [deduplicateById]);
+
+  const showSuccess = useCallback((message) => {
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(''), 5000);
+  }, []);
 
   const reserveBike = async () => {
     try {
-      // Validate user is logged in
+      setError('');
       if (!user?.id) {
         setError('Please log in to reserve a bike.');
         return;
       }
 
-      // Validate station is selected
       if (!reservationData.stationId) {
         setError('Please select a station.');
         return;
       }
 
-      // Ensure data types are correct - convert strings to numbers
       const payload = {
         stationId: Number(reservationData.stationId),
         userId: Number(user.id),
-        expiresAfterMinutes: Number(reservationData.expiresAfterMinutes)
+        expiresAfterMinutes: Number(reservationData.expiresAfterMinutes) || 15
       };
 
-      console.log('Reserving bike with payload:', payload); // Debug log
-      console.log('Payload details:', JSON.stringify(payload, null, 2)); // Show exact values
-
+      console.log('Reserving bike with payload:', payload);
       await api.post('/bikes/reserve', payload);
+      
       setShowReserveModal(false);
       setReservationData({ stationId: '', userId: user.id, expiresAfterMinutes: 15 });
-      setError('');
-      loadData();
+      showSuccess('Bike reserved successfully! You have 15 minutes to checkout.');
+      await loadData();
     } catch (err) {
-      console.error('Reserve bike error:', err); // Debug log
-      console.error('Error response:', err.response?.data); // Show backend error
-      console.error('Error status:', err.response?.status); // Show status code
-      
+      console.error('Reserve bike error:', err);
       const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to reserve bike. Please try again.';
       setError(`Error: ${errorMessage}`);
     }
@@ -93,32 +145,84 @@ const BikeManagement = () => {
 
   const checkoutBike = async (bikeId) => {
     try {
-      // Validate user is logged in
+      setError('');
       if (!user?.id) {
         setError('Please log in to checkout a bike.');
         return;
       }
 
-      // bikeId is a UUID string, userId is a Long number
+      if (!bikeId) {
+        setError('Invalid bike ID.');
+        return;
+      }
+
+      // Find the bike to verify it exists and is in a valid state
+      const bike = bikes.find(b => b.id === bikeId);
+      if (!bike) {
+        setError('Bike not found.');
+        await loadData(); // Refresh data
+        return;
+      }
+
+      if (bike.status !== 'AVAILABLE' && bike.status !== 'RESERVED') {
+        setError(`Bike is ${bike.status} and cannot be checked out.`);
+        await loadData(); // Refresh data
+        return;
+      }
+
+      // If reserved, check if it's reserved by this user
+      if (bike.status === 'RESERVED' && bike.reservedByUserId && Number(bike.reservedByUserId) !== Number(user.id)) {
+        setError('This bike is reserved by another user.');
+        await loadData(); // Refresh data
+        return;
+      }
+
       const payload = { 
-        bikeId: String(bikeId), // Keep as string (UUID)
+        bikeId: String(bikeId), // UUID as string
         userId: Number(user.id) 
       };
+      
       console.log('Checking out bike with payload:', payload);
-      console.log('Payload JSON:', JSON.stringify(payload, null, 2));
-
-      await api.post('/bikes/checkout', payload);
-      setError('');
-      loadData();
+      const response = await api.post('/bikes/checkout', payload);
+      console.log('Checkout response:', response.data);
+      
+      showSuccess('Bike checked out successfully! Enjoy your ride.');
+      await loadData();
     } catch (err) {
       console.error('Checkout bike error:', err);
       console.error('Error response:', err.response?.data);
-      console.error('Error status:', err.response?.status);
-      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to checkout bike. Please try again.');
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to checkout bike. Please try again.';
+      setError(errorMessage);
+      await loadData(); // Refresh to get latest state
     }
   };
 
   const openReturnModal = (bikeId) => {
+    if (!bikeId) {
+      setError('Invalid bike ID.');
+      return;
+    }
+
+    // Find the bike
+    const bike = bikes.find(b => b.id === bikeId);
+    if (!bike) {
+      setError('Bike not found.');
+      loadData(); // Refresh data
+      return;
+    }
+    
+    // Verify bike is IN_USE
+    if (bike.status !== 'IN_USE') {
+      setError(`This bike is ${bike.status}, not in use.`);
+      return;
+    }
+
+    // Verify it's the user's bike
+    if (!bike.currentUserId || Number(bike.currentUserId) !== Number(user?.id)) {
+      setError('You can only return bikes that you have checked out.');
+      return;
+    }
+
     setBikeToReturn(bikeId);
     setReturnStationId('');
     setShowReturnModal(true);
@@ -130,14 +234,40 @@ const BikeManagement = () => {
       return;
     }
 
+    if (!bikeToReturn) {
+      setError('No bike selected to return.');
+      return;
+    }
+
     try {
-      // Validate user is logged in
+      setError('');
       if (!user?.id) {
         setError('Please log in to return a bike.');
         return;
       }
 
-      const selectedReturnStation = stations.find(s => s.id === Number(returnStationId));
+      // Find the bike again to verify state
+      const bike = bikes.find(b => b.id === bikeToReturn);
+      if (!bike) {
+        setError('Bike not found.');
+        await loadData();
+        return;
+      }
+
+      if (bike.status !== 'IN_USE') {
+        setError(`Bike is ${bike.status}, not in use.`);
+        await loadData();
+        return;
+      }
+
+      if (!bike.currentUserId || Number(bike.currentUserId) !== Number(user.id)) {
+        setError('You can only return bikes that you have checked out.');
+        await loadData();
+        return;
+      }
+
+      // Find the station using deduplicated stations
+      const selectedReturnStation = uniqueStations.find(s => s.id === Number(returnStationId));
       if (!selectedReturnStation) {
         setError('Selected station not found.');
         return;
@@ -154,12 +284,11 @@ const BikeManagement = () => {
         return;
       }
 
-      const durationMinutes = Math.random() * 60 + 10; // Simulate trip duration
-      const distanceKm = Math.random() * 20 + 1; // Simulate trip distance
+      const durationMinutes = Math.random() * 60 + 10;
+      const distanceKm = Math.random() * 20 + 1;
       
-      // bikeId is UUID string, IDs are numbers
       const payload = {
-        bikeId: String(bikeToReturn), // Keep as string (UUID)
+        bikeId: String(bikeToReturn), // UUID as string
         returnStationId: Number(returnStationId),
         userId: Number(user.id),
         durationMinutes: Number(durationMinutes.toFixed(2)),
@@ -167,95 +296,138 @@ const BikeManagement = () => {
       };
       
       console.log('Returning bike with payload:', JSON.stringify(payload, null, 2));
-      await api.post('/bikes/return', payload);
-      setError('');
+      const response = await api.post('/bikes/return', payload);
+      console.log('Return response:', response.data);
+      
       setShowReturnModal(false);
       setBikeToReturn(null);
       setReturnStationId('');
-      loadData();
+      showSuccess('Bike returned successfully!');
+      await loadData();
     } catch (err) {
       console.error('Return bike error:', err);
       console.error('Error response:', err.response?.data);
-      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to return bike. Please try again.');
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to return bike. Please try again.';
+      setError(errorMessage);
+      await loadData(); // Refresh to get latest state
     }
   };
 
   const moveBike = async () => {
     try {
-      // Validate user is logged in
+      setError('');
       if (!user?.id) {
         setError('Please log in to move bikes.');
         return;
       }
 
-      // Validate station is selected
       if (!moveData.newStationId) {
         setError('Please select a destination station.');
         return;
       }
 
-      // bikeId is UUID string, IDs are numbers
+      if (!moveData.bikeId) {
+        setError('No bike selected to move.');
+        return;
+      }
+
       const payload = {
-        bikeId: String(moveData.bikeId), // Keep as string (UUID)
+        bikeId: String(moveData.bikeId),
         newStationId: Number(moveData.newStationId),
         operatorId: Number(user.id)
       };
 
       console.log('Moving bike with payload:', JSON.stringify(payload, null, 2));
       await api.post('/bikes/move', payload);
+      
       setShowMoveModal(false);
       setMoveData({ bikeId: '', newStationId: '', operatorId: user.id });
-      setError('');
-      loadData();
+      showSuccess('Bike moved successfully!');
+      await loadData();
     } catch (err) {
       console.error('Move bike error:', err);
-      console.error('Error response:', err.response?.data);
-      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to move bike. Please try again.');
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to move bike. Please try again.';
+      setError(errorMessage);
     }
   };
 
   const createBike = async (type, stationId) => {
     try {
+      setError('');
       const payload = { type, stationId: Number(stationId) };
       console.log('Creating bike with payload:', payload);
       await api.post('/bikes/create', payload);
-      setError('');
-      loadData();
+      showSuccess(`${type} bike created successfully!`);
+      await loadData();
     } catch (err) {
       console.error('Create bike error:', err);
-      console.error('Error response:', err.response?.data);
-      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to create bike. Please try again.');
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to create bike. Please try again.';
+      setError(errorMessage);
     }
   };
 
   const toggleStationStatus = async (stationId) => {
     try {
-      const station = stations.find(s => s.id === stationId);
+      setError('');
+      const station = uniqueStations.find(s => s.id === stationId);
       if (!station) return;
       
       const newStatus = station.status === 'ACTIVE' ? 'OUT_OF_SERVICE' : 'ACTIVE';
       await api.patch(`/operator/stations/${stationId}/status`, { status: newStatus });
       
-      setError('');
-      loadData();
+      showSuccess(`Station status updated to ${newStatus}`);
+      await loadData();
     } catch (err) {
       console.error('Toggle station status error:', err);
-      console.error('Error response:', err.response?.data);
-      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to update station status. Please try again.');
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to update station status. Please try again.';
+      setError(errorMessage);
     }
   };
 
-  const getAvailableBikesByStation = (stationId) => {
-    return bikes.filter(bike => bike.stationId === stationId && bike.status === 'AVAILABLE');
-  };
+  // Memoized deduplicated data
+  const uniqueStations = useMemo(() => {
+    const deduplicated = deduplicateById(stations);
+    console.log(`Deduplicated stations: ${deduplicated.length} from ${stations.length}`);
+    return deduplicated;
+  }, [stations, deduplicateById]);
 
-  const getReservedBikesByStation = (stationId) => {
-    return bikes.filter(bike => bike.stationId === stationId && bike.status === 'RESERVED');
-  };
+  const uniqueBikes = useMemo(() => {
+    const deduplicated = deduplicateById(bikes);
+    console.log(`Deduplicated bikes: ${deduplicated.length} from ${bikes.length}`);
+    return deduplicated;
+  }, [bikes, deduplicateById]);
 
-  const getInUseBikesByStation = (stationId) => {
-    return bikes.filter(bike => bike.stationId === stationId && bike.status === 'IN_USE');
-  };
+  // Get displayable bikes (at stations or IN_USE)
+  const displayableBikes = useMemo(() => {
+    return uniqueBikes.filter(bike => {
+      if (bike.stationId) return true; // At a station
+      if (bike.status === 'IN_USE') return true; // In use
+      return false; // Orphaned bikes
+    });
+  }, [uniqueBikes]);
+
+  // Get user's active bike
+  const userActiveBike = useMemo(() => {
+    if (!user?.id) return null;
+    return displayableBikes.find(b => 
+      b.status === 'IN_USE' && 
+      b.currentUserId && 
+      Number(b.currentUserId) === Number(user.id)
+    );
+  }, [displayableBikes, user?.id]);
+
+  // Helper functions for station stats
+  const getAvailableBikesByStation = useCallback((stationId) => {
+    return uniqueBikes.filter(b => b.stationId === stationId && b.status === 'AVAILABLE');
+  }, [uniqueBikes]);
+
+  const getReservedBikesByStation = useCallback((stationId) => {
+    return uniqueBikes.filter(b => b.stationId === stationId && b.status === 'RESERVED');
+  }, [uniqueBikes]);
+
+  const getInUseBikesByStation = useCallback((stationId) => {
+    return uniqueBikes.filter(b => b.stationId === stationId && b.status === 'IN_USE');
+  }, [uniqueBikes]);
 
   if (loading) {
     return (
@@ -296,6 +468,21 @@ const BikeManagement = () => {
           <p className="text-gray-600 dark:text-gray-400">
             Manage bike reservations, checkouts, returns, and rebalancing
           </p>
+          
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mt-4 p-4 bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-200 rounded-lg flex items-center justify-between">
+              <span>{successMessage}</span>
+              <button 
+                onClick={() => setSuccessMessage('')}
+                className="ml-4 text-sm underline hover:no-underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Error Message */}
           {error && (
             <div className="mt-4 p-4 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 rounded-lg flex items-center justify-between">
               <span>{error}</span>
@@ -307,13 +494,21 @@ const BikeManagement = () => {
               </button>
             </div>
           )}
+
+          {/* User's Active Bike Notice */}
+          {userActiveBike && (
+            <div className="mt-4 p-4 bg-blue-100 dark:bg-blue-900 border border-blue-400 dark:border-blue-700 text-blue-700 dark:text-blue-200 rounded-lg">
+              <p className="font-medium">You have an active bike:</p>
+              <p className="text-sm">Bike ID: {userActiveBike.id.substring(0, 8)}... - Click "Return" in the bike list below to return it.</p>
+            </div>
+          )}
         </div>
 
         {/* Station Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {stations.map((station) => (
+          {uniqueStations.map((station) => (
             <motion.div
-              key={station.id}
+              key={`station-${station.id}`}
               whileHover={{ scale: 1.02 }}
               className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700"
             >
@@ -358,7 +553,6 @@ const BikeManagement = () => {
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    setSelectedStation(station);
                     setReservationData({ 
                       stationId: station.id,
                       userId: user?.id || '',
@@ -406,10 +600,21 @@ const BikeManagement = () => {
 
         {/* Bike List */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              All Bikes ({bikes.length})
+              All Bikes ({displayableBikes.length})
             </h2>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Showing bikes at stations and active rides
+              </div>
+              <button
+                onClick={loadData}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -434,248 +639,149 @@ const BikeManagement = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {bikes.map((bike) => (
-                  <tr key={bike.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {bike.id.substring(0, 8)}...
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {bike.type}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        bike.status === 'AVAILABLE' 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                          : bike.status === 'RESERVED'
-                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                          : bike.status === 'IN_USE'
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                          : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                      }`}>
-                        {bike.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {stations.find(s => s.id === bike.stationId)?.name || 'Unknown'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
-                      {bike.status === 'AVAILABLE' && (
-                        <button
-                          onClick={() => checkoutBike(bike.id)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                        >
-                          Checkout
-                        </button>
-                      )}
-                      {bike.status === 'RESERVED' && (
-                        <button
-                          onClick={() => checkoutBike(bike.id)}
-                          className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                        >
-                          Checkout Reserved
-                        </button>
-                      )}
-                      {bike.status === 'IN_USE' && (
-                        <button
-                          onClick={() => openReturnModal(bike.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                        >
-                          Return
-                        </button>
-                      )}
-                      {user?.role === 'OPERATOR' && bike.status === 'AVAILABLE' && (
-                        <button
-                          onClick={() => {
-                            setMoveData({ ...moveData, bikeId: bike.id });
-                            setShowMoveModal(true);
-                          }}
-                          className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                        >
-                          Move
-                        </button>
-                      )}
+                {displayableBikes.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                      No bikes to display
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  displayableBikes.map((bike) => {
+                    const isUserBike = bike.status === 'IN_USE' && 
+                                      bike.currentUserId && 
+                                      Number(bike.currentUserId) === Number(user?.id);
+                    return (
+                      <tr 
+                        key={`bike-${bike.id}`}
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                          isUserBike ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                        }`}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          {bike.id.substring(0, 8)}...
+                          {isUserBike && (
+                            <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(Your bike)</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {bike.type}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            bike.status === 'AVAILABLE' 
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              : bike.status === 'RESERVED'
+                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                              : bike.status === 'IN_USE'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                          }`}>
+                            {bike.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {bike.stationId 
+                            ? (uniqueStations.find(s => s.id === bike.stationId)?.name || `Station ${bike.stationId}`)
+                            : (bike.status === 'IN_USE' ? 'In Use (No Station)' : 'N/A')
+                          }
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                          {bike.status === 'AVAILABLE' && (
+                            <button
+                              onClick={() => checkoutBike(bike.id)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                            >
+                              Checkout
+                            </button>
+                          )}
+                          {bike.status === 'RESERVED' && (
+                            <button
+                              onClick={() => checkoutBike(bike.id)}
+                              className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                            >
+                              Checkout Reserved
+                            </button>
+                          )}
+                          {bike.status === 'IN_USE' && isUserBike && (
+                            <button
+                              onClick={() => openReturnModal(bike.id)}
+                              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                            >
+                              Return
+                            </button>
+                          )}
+                          {bike.status === 'IN_USE' && !isUserBike && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500">In use by another user</span>
+                          )}
+                          {user?.role === 'OPERATOR' && bike.status === 'AVAILABLE' && (
+                            <button
+                              onClick={() => {
+                                setMoveData({ ...moveData, bikeId: bike.id });
+                                setShowMoveModal(true);
+                              }}
+                              className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                            >
+                              Move
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
         {/* Reserve Modal */}
-        {showReserveModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4"
-            >
-              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-                Reserve Bike
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Station
-                  </label>
-                  <select
-                    value={reservationData.stationId}
-                    onChange={(e) => setReservationData({ ...reservationData, stationId: e.target.value })}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="">Select Station</option>
-                    {stations.map(station => (
-                      <option key={station.id} value={station.id}>
-                        {station.name} ({getAvailableBikesByStation(station.id).length} available)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Expires After (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={reservationData.expiresAfterMinutes}
-                    onChange={(e) => setReservationData({ ...reservationData, expiresAfterMinutes: parseInt(e.target.value) })}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    min="1"
-                    max="60"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowReserveModal(false)}
-                  className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={reserveBike}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  Reserve
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        <ReserveBikeModal
+          isOpen={showReserveModal}
+          onClose={() => {
+            setShowReserveModal(false);
+            setReservationData({ stationId: '', userId: user?.id || '', expiresAfterMinutes: 15 });
+            setError('');
+          }}
+          onReserve={reserveBike}
+          stations={uniqueStations}
+          bikes={uniqueBikes}
+          reservationData={reservationData}
+          onDataChange={setReservationData}
+          error={error}
+        />
 
         {/* Move Modal */}
-        {showMoveModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4"
-            >
-              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-                Move Bike
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Destination Station
-                  </label>
-                  <select
-                    value={moveData.newStationId}
-                    onChange={(e) => setMoveData({ ...moveData, newStationId: e.target.value })}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="">Select Destination</option>
-                    {stations.map(station => (
-                      <option key={station.id} value={station.id}>
-                        {station.name} ({station.currentBikeCount}/{station.capacity})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowMoveModal(false)}
-                  className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={moveBike}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-                >
-                  Move Bike
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        <MoveBikeModal
+          isOpen={showMoveModal}
+          onClose={() => {
+            setShowMoveModal(false);
+            setMoveData({ bikeId: '', newStationId: '', operatorId: user?.id || '' });
+            setError('');
+          }}
+          onMove={moveBike}
+          stations={uniqueStations}
+          selectedBike={displayableBikes.find(b => b.id === moveData.bikeId)}
+          destinationStationId={moveData.newStationId}
+          onDestinationChange={(stationId) => setMoveData({ ...moveData, newStationId: stationId })}
+          sourceStationId={displayableBikes.find(b => b.id === moveData.bikeId)?.stationId}
+          error={error}
+        />
 
         {/* Return Bike Modal */}
-        {showReturnModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4"
-            >
-              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-                Return Bike
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Select Return Station
-                  </label>
-                  <select
-                    value={returnStationId}
-                    onChange={(e) => setReturnStationId(e.target.value)}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="">Select Station</option>
-                    {stations
-                      .filter(s => s.status === 'ACTIVE')
-                      .map(station => {
-                        const freeDocks = station.capacity - station.currentBikeCount;
-                        const isFull = freeDocks === 0;
-                        return (
-                          <option 
-                            key={station.id} 
-                            value={station.id}
-                            disabled={isFull}
-                          >
-                            {station.name} ({freeDocks} free docks{isFull ? ' - FULL' : ''})
-                          </option>
-                        );
-                      })}
-                  </select>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Select the station where you want to return the bike
-                  </p>
-                </div>
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => {
-                    setShowReturnModal(false);
-                    setBikeToReturn(null);
-                    setReturnStationId('');
-                  }}
-                  className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={returnBike}
-                  disabled={!returnStationId}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                >
-                  Return Bike
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        <ReturnBikeModal
+          isOpen={showReturnModal}
+          onClose={() => {
+            setShowReturnModal(false);
+            setBikeToReturn(null);
+            setReturnStationId('');
+            setError('');
+          }}
+          onReturn={returnBike}
+          stations={uniqueStations}
+          selectedStationId={returnStationId}
+          onStationChange={setReturnStationId}
+          error={error}
+        />
       </div>
     </motion.div>
   );

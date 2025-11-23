@@ -25,7 +25,7 @@ A comprehensive bike sharing platform.
 - **Spring Boot 3.4** - A Java framework that simplifies the development of production-ready applications
 - **Spring Security** - A powerful authentication and access-control framework for Java applications
 - **Spring Data JPA** - A framework that simplifies database operations using Java Persistence API
-- **H2 Database** - A lightweight, in-memory database perfect for development and testing
+- **Supabase (PostgreSQL)** - A cloud-based PostgreSQL database with built-in authentication and real-time features
 - **JWT (JSON Web Tokens)** - A secure way to transmit information between parties as a JSON object
 - **Maven** - A build automation tool used primarily for Java projects to manage dependencies and build processes
 
@@ -97,7 +97,18 @@ The `pom.xml` file is Maven's configuration file that contains:
    cd qwikride-backend
    ```
 
-2. Run the Spring Boot application:
+2. Configure database credentials:
+   - Copy `.env.example` to `.env`:
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit `.env` and add your Supabase database password:
+     ```
+     DB_PASSWORD=your_database_password_here
+     ```
+   - **Note**: The database password is different from the API key. Find it in your Supabase Dashboard under Project Settings > Database.
+
+3. Run the Spring Boot application:
    ```bash
    ./mvnw spring-boot:run
    ```
@@ -110,10 +121,11 @@ The `pom.xml` file is Maven's configuration file that contains:
    **What happens here?**
    - `mvnw` (Maven Wrapper) downloads Maven if not present
    - Maven reads `pom.xml` to understand project dependencies
+   - Spring Boot connects to Supabase PostgreSQL database
    - Spring Boot starts an embedded web server
    - The application becomes available at `http://localhost:8080`
 
-3. The backend will start on `http://localhost:8080`
+4. The backend will start on `http://localhost:8080`
 
 ### Frontend Setup
 
@@ -188,7 +200,7 @@ The system supports two user roles:
 - **JWT Authentication** - Secure token-based authentication
 - **Spring Security** - Comprehensive security configuration
 - **RESTful API** - Clean API endpoints
-- **Data Persistence** - JPA with H2 database
+- **Data Persistence** - JPA with Supabase PostgreSQL database
 - **Input Validation** - Request validation and error handling
 
 ## Available Scripts

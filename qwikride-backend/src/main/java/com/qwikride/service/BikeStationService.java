@@ -10,6 +10,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,7 +21,17 @@ public class BikeStationService {
     private final ApplicationEventPublisher publisher;
 
     public List<BikeStation> getAllStations() {
-        return repository.findAll();
+        List<BikeStation> allStations = repository.findAll();
+        // Deduplicate by ID to prevent any duplicates
+        Set<Long> seenIds = new LinkedHashSet<>();
+        return allStations.stream()
+                .filter(station -> {
+                    if (station == null || station.getId() == null) return false;
+                    if (seenIds.contains(station.getId())) return false;
+                    seenIds.add(station.getId());
+                    return true;
+                })
+                .collect(Collectors.toList());
     }
 
     public BikeStation createStation(BikeStation station) {
