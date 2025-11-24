@@ -23,14 +23,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        // Skip JWT processing for certain paths that should be permitAll
-        String path = request.getRequestURI();
-        if (path.startsWith("/api/auth/") || 
-            path.matches("/api/bikes/station/[^/]+(/available)?")) {
-            filterChain.doFilter(request, response);
-            return;
-}
-        
+
         final String authHeader = request.getHeader("Authorization");
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
@@ -45,8 +38,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                                 username,
                                 null,
-                                List.of(new SimpleGrantedAuthority(role))
-                        );
+                                List.of(new SimpleGrantedAuthority(role)));
                         SecurityContextHolder.getContext().setAuthentication(auth);
                     }
                 }

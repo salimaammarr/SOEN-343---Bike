@@ -13,6 +13,7 @@ const RideHistory = () => {
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [viewAllTrips, setViewAllTrips] = useState(false); // For dual-role users
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
@@ -34,7 +35,7 @@ const RideHistory = () => {
       fetchRideHistory();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters, viewAllTrips]);
 
   const fetchRideHistory = async () => {
     if (!user?.id) {
@@ -47,10 +48,23 @@ const RideHistory = () => {
       setLoading(true);
       setError(null);
       
-      // Operators can see all ride histories, riders only see their own
-      const response = user.role === 'OPERATOR' 
-        ? await rideHistoryService.getAllRideHistories(filters)
-        : await rideHistoryService.getUserRideHistory(user.id, filters);
+      // Determine if user has dual role
+      const hasDualRole = user.hasDualRole || user.primaryRole === 'OPERATOR';
+      const currentRole = user.activeRole || user.role;
+      
+      let response;
+      
+      // If user is operator with dual role capability
+      if (hasDualRole && currentRole === 'OPERATOR') {
+        // Use the new dual-role endpoint
+        response = await rideHistoryService.getDualRoleRideHistory(user.id, viewAllTrips, filters);
+      } else if (user.role === 'OPERATOR' && currentRole === 'OPERATOR') {
+        // Pure operator (no dual role) - see all trips
+        response = await rideHistoryService.getAllRideHistories(filters);
+      } else {
+        // Rider or operator acting as rider - see only own trips
+        response = await rideHistoryService.getUserRideHistory(user.id, filters);
+      }
       
       // Handle paginated response (if content exists) or direct array
       const historyData = response.data?.content || response.data || [];
@@ -154,19 +168,56 @@ const RideHistory = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-primary-900 via-primary-700 to-primary-900 dark:from-gray-50 dark:via-gray-200 dark:to-gray-50 bg-clip-text text-transparent mb-2">
-            {user?.role === 'OPERATOR' ? 'All Riders History' : 'Ride History'}
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            {user?.role === 'OPERATOR' 
-              ? 'View ride history for all riders in the system'
-              : 'View your past rides and journey statistics'
-            }
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-primary-900 via-primary-700 to-primary-900 dark:from-gray-50 dark:via-gray-200 dark:to-gray-50 bg-clip-text text-transparent mb-2">
+                {user?.role === 'OPERATOR' && !viewAllTrips ? 'My Ride History' : user?.role === 'OPERATOR' ? 'All Riders History' : 'Ride History'}
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                {user?.role === 'OPERATOR' && viewAllTrips
+                  ? 'View ride history for all riders in the system'
+                  : 'View your past rides and journey statistics'
+                }
+              </p>
+            </div>
+            
+            {/* Dual Role Toggle - Show only for operators with dual role */}
+            {(user?.hasDualRole || user?.primaryRole === 'OPERATOR') && (user?.activeRole || user?.role) === 'OPERATOR' && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl p-3 shadow-md border border-gray-200 dark:border-gray-700"
+              >
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  View:
+                </span>
+                <button
+                  onClick={() => setViewAllTrips(false)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    !viewAllTrips
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  My Trips
+                </button>
+                <button
+                  onClick={() => setViewAllTrips(true)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    viewAllTrips
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  All Trips
+                </button>
+              </motion.div>
+            )}
+          </div>
         </motion.div>
 
-        {/* Statistics Cards - Only show for riders */}
-        {statistics && user?.role !== 'OPERATOR' && (
+        {/* Statistics Cards - Only show for riders or when viewing own trips */}
+        {statistics && (user?.role !== 'OPERATOR' || !viewAllTrips) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

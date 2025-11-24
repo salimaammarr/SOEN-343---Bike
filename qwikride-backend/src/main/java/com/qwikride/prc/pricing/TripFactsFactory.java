@@ -3,12 +3,14 @@ package com.qwikride.prc.pricing;
 import com.qwikride.model.Bike;
 import com.qwikride.model.BikeType;
 import com.qwikride.model.RideHistory;
+import com.qwikride.model.User;
 import com.qwikride.prc.domain.MembershipStatus;
 import com.qwikride.prc.pricing.domain.TripFacts;
 import com.qwikride.prc.pricing.selector.SelectionInput;
 import com.qwikride.prc.service.MembershipService;
 import com.qwikride.repository.BikeRepository;
 import com.qwikride.repository.BikeStationRepository;
+import com.qwikride.repository.UserRepository;
 import com.qwikride.service.RideHistoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -24,6 +26,7 @@ public class TripFactsFactory {
     private final BikeRepository bikeRepository;
     private final BikeStationRepository bikeStationRepository;
     private final MembershipService membershipService;
+    private final UserRepository userRepository;
 
     public TripFacts buildTripFacts(UUID bikeId,
             Long riderId,
@@ -45,6 +48,12 @@ public class TripFactsFactory {
 
         MembershipStatus membershipStatus = membershipService.resolveMembership(riderId);
 
+        // Check if this is an operator acting as a rider
+        boolean isOperatorActingAsRider = userRepository.findById(riderId)
+                .map(user -> user.getRole() == User.UserRole.OPERATOR &&
+                        user.getActiveRole() == User.UserRole.RIDER)
+                .orElse(false);
+
         return TripFacts.builder()
                 .bikeId(bikeId)
                 .riderId(riderId)
@@ -56,6 +65,7 @@ public class TripFactsFactory {
                 .distanceKm(distanceKm)
                 .membershipStatus(membershipStatus)
                 .cityId(resolveCityId(startStationId))
+                .isOperatorActingAsRider(isOperatorActingAsRider)
                 .build();
     }
 

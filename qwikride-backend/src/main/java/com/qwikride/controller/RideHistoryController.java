@@ -37,11 +37,11 @@ public class RideHistoryController {
             @RequestParam(required = false) String bikeType,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size) {
-        
+
         RideHistoryFilterDTO.RideHistoryFilterDTOBuilder builder = RideHistoryFilterDTO.builder()
                 .page(page)
                 .size(size);
-        
+
         if (startDate != null && !startDate.isEmpty()) {
             try {
                 builder.startDate(java.time.LocalDateTime.parse(startDate));
@@ -54,7 +54,7 @@ public class RideHistoryController {
                 }
             }
         }
-        
+
         if (endDate != null && !endDate.isEmpty()) {
             try {
                 builder.endDate(java.time.LocalDateTime.parse(endDate));
@@ -66,9 +66,11 @@ public class RideHistoryController {
                 }
             }
         }
-        
-        if (stationId != null) builder.stationId(stationId);
-        if (startStationOnly != null) builder.startStationOnly(startStationOnly);
+
+        if (stationId != null)
+            builder.stationId(stationId);
+        if (startStationOnly != null)
+            builder.startStationOnly(startStationOnly);
         if (status != null && !status.isEmpty()) {
             try {
                 builder.status(com.qwikride.model.RideHistory.RideStatus.valueOf(status));
@@ -76,8 +78,9 @@ public class RideHistoryController {
                 // Ignore invalid status
             }
         }
-        if (bikeType != null && !bikeType.isEmpty()) builder.bikeType(bikeType);
-        
+        if (bikeType != null && !bikeType.isEmpty())
+            builder.bikeType(bikeType);
+
         RideHistoryFilterDTO filter = builder.build();
         List<RideHistoryResponseDTO> history = rideHistoryService.getUserRideHistory(userId, filter);
         return ResponseEntity.ok(history);
@@ -98,12 +101,12 @@ public class RideHistoryController {
             @RequestParam(required = false) String bikeType,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size) {
-        
+
         RideHistoryFilterDTO.RideHistoryFilterDTOBuilder builder = RideHistoryFilterDTO.builder()
                 .userId(userId)
                 .page(page)
                 .size(size);
-        
+
         if (startDate != null && !startDate.isEmpty()) {
             try {
                 builder.startDate(java.time.LocalDateTime.parse(startDate));
@@ -115,7 +118,7 @@ public class RideHistoryController {
                 }
             }
         }
-        
+
         if (endDate != null && !endDate.isEmpty()) {
             try {
                 builder.endDate(java.time.LocalDateTime.parse(endDate));
@@ -127,9 +130,11 @@ public class RideHistoryController {
                 }
             }
         }
-        
-        if (stationId != null) builder.stationId(stationId);
-        if (startStationOnly != null) builder.startStationOnly(startStationOnly);
+
+        if (stationId != null)
+            builder.stationId(stationId);
+        if (startStationOnly != null)
+            builder.startStationOnly(startStationOnly);
         if (status != null && !status.isEmpty()) {
             try {
                 builder.status(com.qwikride.model.RideHistory.RideStatus.valueOf(status));
@@ -137,8 +142,9 @@ public class RideHistoryController {
                 // Ignore invalid status
             }
         }
-        if (bikeType != null && !bikeType.isEmpty()) builder.bikeType(bikeType);
-        
+        if (bikeType != null && !bikeType.isEmpty())
+            builder.bikeType(bikeType);
+
         RideHistoryFilterDTO filter = builder.build();
         List<RideHistoryResponseDTO> history = rideHistoryService.getAllRideHistories(filter);
         return ResponseEntity.ok(history);
@@ -163,5 +169,75 @@ public class RideHistoryController {
         RideStatisticsDTO statistics = rideHistoryService.getRideStatistics(userId);
         return ResponseEntity.ok(statistics);
     }
-}
 
+    /**
+     * Get ride history for dual-role users based on their view preference.
+     * When viewAll=true: Returns all trips (operator view)
+     * When viewAll=false: Returns only the user's own trips (rider view)
+     */
+    @GetMapping("/dual-role")
+    @PreAuthorize("hasAuthority('OPERATOR')")
+    public ResponseEntity<List<RideHistoryResponseDTO>> getDualRoleRideHistory(
+            @RequestParam(required = true) Long userId,
+            @RequestParam(required = false, defaultValue = "false") Boolean viewAll,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) Long stationId,
+            @RequestParam(required = false) Boolean startStationOnly,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String bikeType,
+            @RequestParam(required = false, defaultValue = "0") Integer page,
+            @RequestParam(required = false, defaultValue = "20") Integer size) {
+
+        RideHistoryFilterDTO.RideHistoryFilterDTOBuilder builder = RideHistoryFilterDTO.builder()
+                .page(page)
+                .size(size);
+
+        // If not viewing all, filter by userId
+        if (!viewAll) {
+            builder.userId(userId);
+        }
+
+        if (startDate != null && !startDate.isEmpty()) {
+            try {
+                builder.startDate(java.time.LocalDateTime.parse(startDate));
+            } catch (Exception e) {
+                try {
+                    builder.startDate(java.time.LocalDate.parse(startDate).atStartOfDay());
+                } catch (Exception ex) {
+                    // Ignore invalid date
+                }
+            }
+        }
+
+        if (endDate != null && !endDate.isEmpty()) {
+            try {
+                builder.endDate(java.time.LocalDateTime.parse(endDate));
+            } catch (Exception e) {
+                try {
+                    builder.endDate(java.time.LocalDate.parse(endDate).atTime(23, 59, 59));
+                } catch (Exception ex) {
+                    // Ignore invalid date
+                }
+            }
+        }
+
+        if (stationId != null)
+            builder.stationId(stationId);
+        if (startStationOnly != null)
+            builder.startStationOnly(startStationOnly);
+        if (status != null && !status.isEmpty()) {
+            try {
+                builder.status(com.qwikride.model.RideHistory.RideStatus.valueOf(status));
+            } catch (Exception e) {
+                // Ignore invalid status
+            }
+        }
+        if (bikeType != null && !bikeType.isEmpty())
+            builder.bikeType(bikeType);
+
+        RideHistoryFilterDTO filter = builder.build();
+        List<RideHistoryResponseDTO> history = rideHistoryService.getAllRideHistories(filter);
+        return ResponseEntity.ok(history);
+    }
+}

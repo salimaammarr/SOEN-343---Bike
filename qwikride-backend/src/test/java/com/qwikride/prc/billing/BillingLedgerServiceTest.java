@@ -7,6 +7,7 @@ import com.qwikride.prc.pricing.domain.FinalizedBill;
 import com.qwikride.prc.pricing.domain.TripFacts;
 import com.qwikride.prc.repository.LedgerEntryRepository;
 import com.qwikride.repository.UserRepository;
+import com.qwikride.service.FlexDollarsService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -24,6 +25,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +37,9 @@ class BillingLedgerServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private FlexDollarsService flexDollarsService;
+
     @InjectMocks
     private BillingLedgerService billingLedgerService;
 
@@ -44,6 +49,7 @@ class BillingLedgerServiceTest {
         BigDecimal base = new BigDecimal("1.20");
         BigDecimal perMinute = new BigDecimal("0.30");
         BigDecimal surcharge = new BigDecimal("0.60");
+        BigDecimal total = base.add(perMinute).add(surcharge);
 
         List<ChargeLine> charges = List.of(
                 ChargeLine.builder().code("BASE_FEE").amount(base).meta(Map.of()).build(),
@@ -54,7 +60,7 @@ class BillingLedgerServiceTest {
                 .planVersionId(planVersionId)
                 .planName("Urban Flex")
                 .charges(charges)
-                .total(base.add(perMinute).add(surcharge))
+                .total(total)
                 .build();
 
         UUID bikeId = UUID.randomUUID();
@@ -75,7 +81,8 @@ class BillingLedgerServiceTest {
             persisted.setId(99L);
             return persisted;
         });
-        when(userRepository.findById(77L)).thenReturn(Optional.empty());
+        // Mock FlexDollarsService to return 0 used
+        when(flexDollarsService.useFlexDollars(eq(77L), any(BigDecimal.class))).thenReturn(BigDecimal.ZERO);
 
         LedgerEntry result = billingLedgerService.appendTripEntry(bill, tripFacts);
 

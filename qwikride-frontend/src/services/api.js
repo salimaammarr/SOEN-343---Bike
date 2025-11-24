@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -19,15 +20,15 @@ api.interceptors.request.use((config) => {
 
 export const authService = {
   register: async (userData) => {
-    const response = await api.post('/auth/register', userData);
+    const response = await api.post("/auth/register", userData);
     return response;
   },
   login: async (credentials) => {
-    const response = await api.post('/auth/login', credentials);
+    const response = await api.post("/auth/login", credentials);
     return response;
   },
   toggleRole: async (role) => {
-    const response = await api.post('/auth/toggle-role', { role });
+    const response = await api.post("/auth/toggle-role", { role });
     return response;
   },
 };
@@ -55,6 +56,19 @@ export const rideHistoryService = {
     if (filters.size) params.append("size", filters.size);
 
     return api.get(`/history/all?${params.toString()}`);
+  },
+  getDualRoleRideHistory: (userId, viewAll = false, filters = {}) => {
+    const params = new URLSearchParams();
+    params.append("userId", userId);
+    params.append("viewAll", viewAll);
+    if (filters.startDate) params.append("startDate", filters.startDate);
+    if (filters.endDate) params.append("endDate", filters.endDate);
+    if (filters.status) params.append("status", filters.status);
+    if (filters.bikeType) params.append("bikeType", filters.bikeType);
+    if (filters.page) params.append("page", filters.page);
+    if (filters.size) params.append("size", filters.size);
+
+    return api.get(`/history/dual-role?${params.toString()}`);
   },
   getRideHistoryById: (id) => api.get(`/history/${id}`),
   getRideStatistics: (userId) => api.get(`/history/user/${userId}/statistics`),

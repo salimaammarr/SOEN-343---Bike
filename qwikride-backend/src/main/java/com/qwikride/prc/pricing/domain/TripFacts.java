@@ -21,6 +21,7 @@ public class TripFacts {
     double distanceKm;
     MembershipStatus membershipStatus;
     String cityId;
+    boolean isOperatorActingAsRider; // True when an operator is acting as a rider
 
     public long durationMinutes() {
         if (startTime == null || endTime == null) {

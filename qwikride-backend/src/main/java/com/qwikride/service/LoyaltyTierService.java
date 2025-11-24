@@ -2,9 +2,11 @@ package com.qwikride.service;
 
 import com.qwikride.model.RideHistory;
 import com.qwikride.model.User;
+import com.qwikride.model.ReservationHistory;
 import com.qwikride.prc.domain.MembershipStatus;
 import com.qwikride.repository.RideHistoryRepository;
 import com.qwikride.repository.UserRepository;
+import com.qwikride.repository.ReservationHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ import java.util.List;
 public class LoyaltyTierService {
     private final UserRepository userRepository;
     private final RideHistoryRepository rideHistoryRepository;
+    private final ReservationHistoryRepository reservationHistoryRepository;
 
     /**
      * Evaluate and update the tier for a rider based on their usage history.
@@ -40,7 +43,7 @@ public class LoyaltyTierService {
         MembershipStatus newTier = evaluateTier(userId);
 
         boolean tierChanged = !currentTier.equals(newTier);
-        
+
         if (tierChanged) {
             user.setMembershipStatus(newTier);
             userRepository.save(user);
@@ -77,7 +80,9 @@ public class LoyaltyTierService {
 
     /**
      * Check Bronze tier requirements:
-     * Surpassed 10 trips in the last year
+     * - Surpassed 10 trips in the last year
+     * - All bikes returned (no active rides)
+     * - No missed reservations (Not implemented: requires Reservation History)
      */
     private boolean meetsBronzeRequirements(Long userId, LocalDateTime oneYearAgo) {
         // Check for more than 10 trips in the last year
@@ -87,12 +92,28 @@ public class LoyaltyTierService {
             return false;
         }
 
+        // Check that all bikes are returned (no active rides)
+        long activeRides = rideHistoryRepository.countByUserIdAndEndTimeIsNull(userId);
+        if (activeRides > 0) {
+            log.debug("User {} failed Bronze: Has {} active rides (bikes not returned)", userId, activeRides);
+            return false;
+        }
+
+        // Check for no missed reservations in the last year
+        long missedReservations = reservationHistoryRepository.countByUserIdAndStatusAndCompletionTimeAfter(
+                userId, ReservationHistory.ReservationStatus.EXPIRED, oneYearAgo);
+        if (missedReservations > 0) {
+            log.debug("User {} failed Bronze: Has {} missed reservations in last year", userId, missedReservations);
+            return false;
+        }
+
         return true;
     }
 
     /**
      * Check Silver tier requirements:
      * Must meet Bronze requirements + 5 trips per month for the last three months
+     * - > 5 claimed reservations (Not implemented: requires Reservation History)
      */
     private boolean meetsSilverRequirements(Long userId, LocalDateTime oneYearAgo, LocalDateTime threeMonthsAgo) {
         // Must meet Bronze requirements first
@@ -100,7 +121,16 @@ public class LoyaltyTierService {
             return false;
         }
 
-        // Surpassed 5 trips per month for the last three months
+        // Check for > 5 claimed reservations in the last year
+        long claimedReservations = reservationHistoryRepository.countByUserIdAndStatusAndCompletionTimeAfter(
+                userId, ReservationHistory.ReservationStatus.CLAIMED, oneYearAgo);
+        if (claimedReservations <= 5) {
+            log.debug("User {} failed Silver: Only {} claimed reservations in last year (need >5)", userId,
+                    claimedReservations);
+            return false;
+        }
+
+        // Check for > 5 trips per month for the last 3 months
         boolean meetsMonthlyRequirement = checkMonthlyTripRequirement(userId, threeMonthsAgo, 5);
         if (!meetsMonthlyRequirement) {
             log.debug("User {} failed Silver: Did not meet 5 trips/month for last 3 months", userId);
@@ -137,7 +167,7 @@ public class LoyaltyTierService {
     private long countCompletedTrips(Long userId, LocalDateTime start, LocalDateTime end) {
         List<RideHistory> rides = rideHistoryRepository.findByUserIdAndStartTimeBetweenOrderByStartTimeDesc(
                 userId, start, end);
-        
+
         return rides.stream()
                 .filter(ride -> ride.getStatus() == RideHistory.RideStatus.COMPLETED)
                 .count();
@@ -149,7 +179,7 @@ public class LoyaltyTierService {
     private boolean checkMonthlyTripRequirement(Long userId, LocalDateTime threeMonthsAgo, int minTrips) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime currentMonthStart = threeMonthsAgo;
-        
+
         // Check each of the last 3 months
         for (int i = 0; i < 3; i++) {
             LocalDateTime monthStart = currentMonthStart.plusMonths(i);
@@ -157,13 +187,13 @@ public class LoyaltyTierService {
             if (monthEnd.isAfter(now)) {
                 monthEnd = now;
             }
-            
+
             long tripsInMonth = countCompletedTrips(userId, monthStart, monthEnd);
             if (tripsInMonth < minTrips) {
                 return false;
             }
         }
-        
+
         return true;
     }
 
@@ -173,7 +203,7 @@ public class LoyaltyTierService {
     private boolean checkWeeklyTripRequirement(Long userId, LocalDateTime threeMonthsAgo, int minTrips) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime twelveWeeksAgo = LocalDateTime.now().minusWeeks(12);
-        
+
         // Check each of the last 12 weeks (same pattern as monthly check)
         for (int i = 0; i < 12; i++) {
             LocalDateTime weekStart = twelveWeeksAgo.plusWeeks(i);
@@ -181,13 +211,13 @@ public class LoyaltyTierService {
             if (weekEnd.isAfter(now)) {
                 weekEnd = now;
             }
-            
+
             long tripsInWeek = countCompletedTrips(userId, weekStart, weekEnd);
             if (tripsInWeek < minTrips) {
                 return false;
             }
         }
-        
+
         return true;
     }
 
@@ -313,4 +343,3 @@ public class LoyaltyTierService {
         };
     }
 }
-

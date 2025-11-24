@@ -7,6 +7,7 @@ import com.qwikride.factory.BikeFactoryRegistry;
 import com.qwikride.model.*;
 import com.qwikride.repository.BikeRepository;
 import com.qwikride.repository.BikeStationRepository;
+import com.qwikride.repository.ReservationHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +29,7 @@ public class BikeService {
     private final BikeFactoryRegistry bikeFactoryRegistry;
     private final FlexDollarsService flexDollarsService;
     private final com.qwikride.prc.service.MembershipService membershipService;
+    private final ReservationHistoryRepository reservationHistoryRepository;
 
     @Transactional
     @SuppressWarnings("null")
@@ -38,7 +40,7 @@ public class BikeService {
 
         // Update station count
         incrementStationCount(config.getStationId());
-        
+
         return savedBike;
     }
 
@@ -87,6 +89,7 @@ public class BikeService {
         }
 
         if (bike.isReservationExpired()) {
+            recordReservationHistory(bike, ReservationHistory.ReservationStatus.EXPIRED);
             bike.cancelReservation();
             bikeRepository.save(bike);
             eventBus.publish(new ReservationExpiredEvent(bikeId, bike.getReservedByUserId()));
@@ -95,6 +98,11 @@ public class BikeService {
 
         if (!bike.canCheckout()) {
             throw new IllegalStateException("Bike cannot be checked out due to its status or condition");
+        }
+
+        // If bike was reserved by this user, mark reservation as claimed
+        if (bike.getStatus() == BikeStatus.RESERVED && bike.getReservedByUserId().equals(userId)) {
+            recordReservationHistory(bike, ReservationHistory.ReservationStatus.CLAIMED);
         }
 
         bike.checkout(userId);
@@ -112,9 +120,14 @@ public class BikeService {
             throw new IllegalStateException("Bike is not currently checked out by this user");
         }
 
-        // Check if return station is active and has capacity
+        // Check if return station is active
         BikeStation returnStation = getStationByIdOrThrow(returnStationId, "Return station not found");
-        validateStationForBikeReturn(returnStation);
+        validateStationActive(returnStation);
+
+        // Check capacity - if full, award overflow credit
+        if (returnStation.getCurrentBikeCount() >= returnStation.getCapacity()) {
+            flexDollarsService.awardOverflowCredit(returnStation, userId);
+        }
 
         bike.returnBike(returnStationId);
         bikeRepository.save(bike);
@@ -122,14 +135,15 @@ public class BikeService {
 
         // Update station count
         incrementStationCount(returnStationId);
-        
+
         // Refresh station to get updated count for flex dollars check
         BikeStation updatedStation = getStationByIdOrThrow(returnStationId, "Return station not found");
-        
+
         // Award flex dollars if station is below 25% capacity
         flexDollarsService.awardFlexDollarsIfEligible(updatedStation, userId);
 
-        // Publish trip completion event for pricing/billing (PricingService will calculate actual cost)
+        // Publish trip completion event for pricing/billing (PricingService will
+        // calculate actual cost)
         eventBus.publish(new TripEndedEvent(bikeId, userId, returnStationId, durationMinutes, distanceKm, 0.0));
         return bike;
     }
@@ -162,12 +176,13 @@ public class BikeService {
         List<Bike> reservedBikes = bikeRepository.findByStatus(BikeStatus.RESERVED);
         for (Bike bike : reservedBikes) {
             if (bike.isReservationExpired()) {
+                recordReservationHistory(bike, ReservationHistory.ReservationStatus.EXPIRED);
                 bike.cancelReservation();
                 bikeRepository.save(bike);
 
                 // Update station count
                 incrementStationCount(bike.getStationId());
-                
+
                 eventBus.publish(new ReservationExpiredEvent(bike.getId(), bike.getReservedByUserId()));
             }
         }
@@ -183,8 +198,10 @@ public class BikeService {
         Set<UUID> seenIds = new LinkedHashSet<>();
         return allBikes.stream()
                 .filter(bike -> {
-                    if (bike == null || bike.getId() == null) return false;
-                    if (seenIds.contains(bike.getId())) return false;
+                    if (bike == null || bike.getId() == null)
+                        return false;
+                    if (seenIds.contains(bike.getId()))
+                        return false;
                     seenIds.add(bike.getId());
                     return true;
                 })
@@ -238,7 +255,7 @@ public class BikeService {
         validateStationActive(station);
         validateStationCapacity(station);
     }
-    
+
     private void incrementStationCount(Long stationId) {
         if (stationId != null) {
             bikeStationRepository.findById(stationId).ifPresent(station -> {
@@ -251,8 +268,13 @@ public class BikeService {
     private void decrementStationCount(Long stationId) {
         if (stationId != null) {
             bikeStationRepository.findById(stationId).ifPresent(station -> {
-                station.setCurrentBikeCount(Math.max(0, station.getCurrentBikeCount() - 1));
+                int newCount = Math.max(0, station.getCurrentBikeCount() - 1);
+                station.setCurrentBikeCount(newCount);
                 bikeStationRepository.save(station);
+                
+                if (newCount == 0) {
+                    eventBus.publish(new StationEmptyEvent(stationId));
+                }
             });
         }
     }
@@ -265,14 +287,27 @@ public class BikeService {
      */
     private int calculateReservationTimeWithTierExtension(Long userId, int baseMinutes) {
         com.qwikride.prc.domain.MembershipStatus tier = membershipService.resolveMembership(userId);
-        
+
         int extensionMinutes = switch (tier) {
             case SILVER -> 2;
             case GOLD -> 5;
             case BRONZE, ENTRY -> 0;
         };
-        
+
         return baseMinutes + extensionMinutes;
     }
 
+    private void recordReservationHistory(Bike bike, ReservationHistory.ReservationStatus status) {
+        if (bike.getReservedByUserId() != null) {
+            ReservationHistory history = ReservationHistory.builder()
+                    .userId(bike.getReservedByUserId())
+                    .bikeId(bike.getId())
+                    .stationId(bike.getStationId())
+                    .reservationTime(bike.getReservationTime())
+                    .completionTime(java.time.LocalDateTime.now())
+                    .status(status)
+                    .build();
+            reservationHistoryRepository.save(history);
+        }
+    }
 }

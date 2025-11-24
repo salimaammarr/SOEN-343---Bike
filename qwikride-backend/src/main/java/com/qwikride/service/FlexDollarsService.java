@@ -24,8 +24,40 @@ public class FlexDollarsService {
     // Amount of flex dollars awarded per return to low-occupancy station
     private static final BigDecimal FLEX_DOLLARS_REWARD = BigDecimal.valueOf(2.00);
     
+    // Amount of flex dollars awarded for returning to a full station (overflow)
+    private static final BigDecimal OVERFLOW_CREDIT_REWARD = BigDecimal.valueOf(1.00);
+    
     // Minimum capacity threshold (25%)
     private static final double MINIMUM_CAPACITY_THRESHOLD = 0.25;
+
+    /**
+     * Award flex dollars for returning to a full station (overflow).
+     * @param station The station where the bike was returned
+     * @param userId The user who returned the bike
+     * @return The amount of flex dollars awarded
+     */
+    @Transactional
+    public BigDecimal awardOverflowCredit(BikeStation station, Long userId) {
+        if (station == null || userId == null) {
+            return BigDecimal.ZERO;
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        BigDecimal currentBalance = user.getFlexDollars() != null 
+                ? user.getFlexDollars() 
+                : BigDecimal.ZERO;
+        
+        BigDecimal newBalance = currentBalance.add(OVERFLOW_CREDIT_REWARD);
+        user.setFlexDollars(newBalance);
+        userRepository.save(user);
+
+        log.info("Awarded {} flex dollars to user {} for returning bike to full station {} (Overflow)", 
+                OVERFLOW_CREDIT_REWARD, userId, station.getName());
+
+        return OVERFLOW_CREDIT_REWARD;
+    }
 
     /**
      * Check if a station is below minimum capacity (< 25%) and award flex dollars if so.
