@@ -26,5 +26,5 @@ public class RideHistoryFilterCriteria {
     private RideHistory.RideStatus status;
     private String bikeType;
     private UUID bikeId;
+    private Long tripId;
 }
-

@@ -27,7 +27,26 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const updateUser = useCallback((updater) => {
+  const updateUser = useCallback(async (updater) => {
+    // If no updater provided, fetch latest user data from backend
+    if (updater === undefined) {
+        try {
+            const { data } = await authService.getAccount();
+            // Map account DTO to user object structure
+            const updatedUser = {
+                ...user,
+                ...data,
+                // Ensure we keep the token if it's not in the response
+            };
+            setUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            return updatedUser;
+        } catch (error) {
+            console.error("Failed to refresh user data", error);
+            return user;
+        }
+    }
+
     setUser((previous) => {
       const next = typeof updater === 'function' ? updater(previous) : updater;
       if (next) {
@@ -37,12 +56,12 @@ export const AuthProvider = ({ children }) => {
       }
       return next;
     });
-  }, []);
+  }, [user]);
 
   const toggleRole = useCallback(async (newRole) => {
     try {
       const response = await authService.toggleRole(newRole);
-      const { token, username, fullName, role, id, tier, tierChangeNotification, hasDualRole, primaryRole } = response.data;
+      const { token, username, fullName, role, id, tier, pricingPlan, tierChangeNotification, hasDualRole, primaryRole, flexDollars } = response.data;
       
       const updatedUser = {
         username,
@@ -50,9 +69,11 @@ export const AuthProvider = ({ children }) => {
         role,
         id,
         tier,
+        pricingPlan,
         tierChangeNotification,
         hasDualRole: hasDualRole || false,
-        primaryRole: primaryRole || role
+        primaryRole: primaryRole || role,
+        flexDollars
       };
       
       localStorage.setItem('token', token);

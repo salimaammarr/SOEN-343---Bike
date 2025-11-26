@@ -1,6 +1,7 @@
 package com.qwikride.prc.model;
 
 import com.qwikride.prc.domain.MembershipStatus;
+import com.qwikride.prc.domain.PricingPlanType;
 import com.qwikride.prc.pricing.domain.RateSheet;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,6 +33,9 @@ public class PricingPlanVersion {
     private BigDecimal baseFee;
 
     @Column(nullable = false)
+    private BigDecimal subscriptionPrice = BigDecimal.ZERO;
+
+    @Column(nullable = false)
     private BigDecimal perMinuteRate;
 
     @Column
@@ -39,6 +43,9 @@ public class PricingPlanVersion {
 
     @Enumerated(EnumType.STRING)
     private MembershipStatus membershipTier;
+
+    @Enumerated(EnumType.STRING)
+    private PricingPlanType planType;
 
     @Column
     private String cityId;

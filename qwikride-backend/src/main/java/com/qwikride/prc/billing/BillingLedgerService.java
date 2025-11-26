@@ -6,11 +6,14 @@ import com.qwikride.prc.dto.ChargeLineResponse;
 import com.qwikride.prc.dto.TripSummaryResponse;
 import com.qwikride.prc.model.LedgerCharge;
 import com.qwikride.prc.model.LedgerEntry;
+import com.qwikride.prc.model.PricingPlanVersion;
 import com.qwikride.prc.pricing.domain.FinalizedBill;
 import com.qwikride.prc.pricing.domain.TripFacts;
 import com.qwikride.prc.repository.LedgerEntryRepository;
 import com.qwikride.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,14 +26,11 @@ import java.util.stream.Collectors;
 public class BillingLedgerService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final UserRepository userRepository;
-    private final com.qwikride.service.FlexDollarsService flexDollarsService;
 
     @Transactional
     public LedgerEntry appendTripEntry(FinalizedBill bill, TripFacts tripFacts) {
-        // Apply flex dollars automatically to reduce the bill total
-        java.math.BigDecimal originalTotal = bill.getTotal();
-        java.math.BigDecimal flexDollarsUsed = flexDollarsService.useFlexDollars(tripFacts.getRiderId(), originalTotal);
-        java.math.BigDecimal finalTotal = originalTotal.subtract(flexDollarsUsed);
+        // Flex dollars are no longer automatically applied to reduce the bill total
+        java.math.BigDecimal finalTotal = bill.getTotal();
 
         LedgerEntry entry = new LedgerEntry();
         entry.setRiderId(tripFacts.getRiderId());
@@ -46,17 +46,10 @@ public class BillingLedgerService {
         entry.setTotal(finalTotal);
         entry.setPaymentStatus(PaymentStatus.PENDING);
 
-        // Build charges list, adding flex dollars credit if used
+        // Build charges list
         List<LedgerCharge> charges = bill.getCharges().stream()
                 .map(line -> LedgerCharge.from(line.getCode(), line.getAmount(), line.safeMeta()))
                 .collect(Collectors.toList());
-
-        // Add flex dollars credit line if flex dollars were used
-        if (flexDollarsUsed.compareTo(java.math.BigDecimal.ZERO) > 0) {
-            charges.add(LedgerCharge.from("FLEX_DOLLARS_CREDIT", 
-                    flexDollarsUsed.negate(), 
-                    java.util.Map.of("description", "Flex dollars applied")));
-        }
 
         entry.setCharges(charges);
         entry.setSummary(
@@ -78,6 +71,18 @@ public class BillingLedgerService {
         return entries.stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BillingEntryResponse> getHistory(Long riderId, LocalDateTime start, LocalDateTime end,
+            Pageable pageable) {
+        Page<LedgerEntry> entries;
+        if (start != null && end != null) {
+            entries = ledgerEntryRepository.findByRiderAndDateRange(riderId, start, end, pageable);
+        } else {
+            entries = ledgerEntryRepository.findByRiderIdOrderByStartTimeDesc(riderId, pageable);
+        }
+        return entries.map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -160,6 +165,24 @@ public class BillingLedgerService {
         return saved;
     }
 
+    @Transactional
+    public void markAsPaid(Long ledgerEntryId, String paymentReference) {
+        LedgerEntry entry = ledgerEntryRepository.findById(ledgerEntryId)
+                .orElseThrow(() -> new IllegalArgumentException("Ledger entry not found"));
+
+        if (entry.getPaymentStatus() == PaymentStatus.PAID) {
+            return; // Already paid
+        }
+
+        entry.setPaymentStatus(PaymentStatus.PAID);
+        entry.setPaymentReference(paymentReference);
+        entry.setPaymentProcessedAt(LocalDateTime.now());
+        ledgerEntryRepository.save(entry);
+
+        // Reduce user's pending balance
+        adjustRiderBalance(entry.getRiderId(), entry.getTotal().negate());
+    }
+
     private void adjustRiderBalance(Long riderId, java.math.BigDecimal delta) {
         userRepository.findById(riderId).ifPresent(user -> {
             java.math.BigDecimal current = user.getPendingBalance() == null
@@ -168,5 +191,49 @@ public class BillingLedgerService {
             user.setPendingBalance(current.add(delta));
             userRepository.save(user);
         });
+    }
+
+    @Transactional
+    public LedgerEntry recordPlanChange(Long riderId, PricingPlanVersion plan, boolean paid, String paymentReference) {
+        LedgerEntry entry = new LedgerEntry();
+        entry.setRiderId(riderId);
+        entry.setPlanVersionId(plan.getId());
+        entry.setPlanName(plan.getPlanName());
+        entry.setStartTime(LocalDateTime.now());
+        entry.setEndTime(LocalDateTime.now());
+        entry.setDurationMinutes(0);
+        entry.setDistanceKm(0.0);
+
+        java.math.BigDecimal amount = plan.getSubscriptionPrice() != null ? plan.getSubscriptionPrice()
+                : java.math.BigDecimal.ZERO;
+        entry.setTotal(amount);
+
+        if (paid || amount.compareTo(java.math.BigDecimal.ZERO) == 0) {
+            entry.setPaymentStatus(PaymentStatus.PAID);
+            if (paymentReference != null) {
+                entry.setPaymentReference(paymentReference);
+                entry.setPaymentProcessedAt(LocalDateTime.now());
+            }
+        } else {
+            entry.setPaymentStatus(PaymentStatus.PENDING);
+        }
+
+        entry.setSummary("Plan Change: " + plan.getPlanName());
+
+        LedgerCharge charge = LedgerCharge.from("PLAN_SUBSCRIPTION", amount,
+                java.util.Map.of("description", "Subscription fee for " + plan.getPlanName()));
+        entry.setCharges(new java.util.ArrayList<>(List.of(charge)));
+
+        LedgerEntry saved = ledgerEntryRepository.save(entry);
+
+        if (!paid && amount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            adjustRiderBalance(riderId, amount);
+        }
+        return saved;
+    }
+
+    @Transactional
+    public LedgerEntry recordPlanChange(Long riderId, PricingPlanVersion plan, boolean paid) {
+        return recordPlanChange(riderId, plan, paid, null);
     }
 }

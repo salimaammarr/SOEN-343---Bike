@@ -1,6 +1,6 @@
 package com.qwikride.prc.pricing.selector.strategy;
 
-import com.qwikride.prc.domain.MembershipStatus;
+import com.qwikride.prc.domain.PricingPlanType;
 import com.qwikride.prc.model.PricingPlanVersion;
 import com.qwikride.prc.pricing.domain.PricingContext;
 import com.qwikride.prc.pricing.selector.PlanSelectionStrategy;
@@ -20,12 +20,12 @@ public class MembershipStrategy implements PlanSelectionStrategy {
 
     @Override
     public Optional<PricingContext> select(SelectionInput input) {
-        MembershipStatus membership = input.getMembershipStatus();
-        if (membership == null || membership == MembershipStatus.ENTRY) {
+        PricingPlanType planType = input.getPricingPlanType();
+        if (planType == null) {
             return Optional.empty();
         }
 
-        return repository.findActivePlansForMembership(membership, input.getTripEndTime()).stream()
+        return repository.findActivePlansForPlanType(planType, input.getTripEndTime()).stream()
                 .findFirst()
                 .map(this::toContext);
     }

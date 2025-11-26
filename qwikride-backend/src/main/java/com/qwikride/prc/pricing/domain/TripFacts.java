@@ -1,6 +1,7 @@
 package com.qwikride.prc.pricing.domain;
 
 import com.qwikride.prc.domain.MembershipStatus;
+import com.qwikride.prc.domain.PricingPlanType;
 import lombok.Builder;
 import lombok.Value;
 
@@ -20,6 +21,7 @@ public class TripFacts {
     boolean ebike;
     double distanceKm;
     MembershipStatus membershipStatus;
+    PricingPlanType pricingPlanType;
     String cityId;
     boolean isOperatorActingAsRider; // True when an operator is acting as a rider
 

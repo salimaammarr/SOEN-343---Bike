@@ -20,50 +20,51 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http,
-            com.qwikride.filter.JwtRequestFilter jwtRequestFilter) throws Exception {
-        http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/bikes/**", "/api/prc/pricing/**",
-                                "/api/test/**", "/h2-console/**")
-                        .permitAll()
-                        .requestMatchers("/api/operator/**").hasAuthority("OPERATOR")
-                        .requestMatchers("/api/prc/pricing/admin/**", "/api/prc/disputes/open",
-                                "/api/prc/disputes/*/resolve")
-                        .hasAuthority("OPERATOR")
-                        .requestMatchers("/api/history/**", "/api/prc/billing/**",
-                                "/api/prc/disputes/**")
-                        .authenticated()
-                        .anyRequest().authenticated())
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
+        @Bean
+        public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                        com.qwikride.filter.JwtRequestFilter jwtRequestFilter) throws Exception {
+                http
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                                .csrf(csrf -> csrf.disable())
+                                .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers("/api/auth/**", "/api/bikes/**", "/api/stations/**",
+                                                                "/api/prc/pricing/**",
+                                                                "/api/test/**", "/h2-console/**")
+                                                .permitAll()
+                                                .requestMatchers("/api/operator/**").hasAuthority("OPERATOR")
+                                                .requestMatchers("/api/prc/pricing/admin/**", "/api/prc/disputes/open",
+                                                                "/api/prc/disputes/*/resolve")
+                                                .hasAuthority("OPERATOR")
+                                                .requestMatchers("/api/history/**", "/api/prc/billing/**",
+                                                                "/api/prc/disputes/**", "/api/payments/**")
+                                                .authenticated()
+                                                .anyRequest().authenticated())
+                                .sessionManagement(session -> session
+                                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
 
-        // Register JWT filter so incoming requests with Bearer tokens are authenticated
-        http.addFilterBefore(jwtRequestFilter,
-                org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
+                // Register JWT filter so incoming requests with Bearer tokens are authenticated
+                http.addFilterBefore(jwtRequestFilter,
+                                org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
 
-        return http.build();
-    }
+                return http.build();
+        }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setAllowCredentials(true);
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration configuration = new CorsConfiguration();
+                configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
+                configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                configuration.setAllowedHeaders(Arrays.asList("*"));
+                configuration.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", configuration);
+                return source;
+        }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+                return new BCryptPasswordEncoder();
+        }
 }

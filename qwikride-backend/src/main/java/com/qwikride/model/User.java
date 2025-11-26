@@ -1,6 +1,7 @@
 package com.qwikride.model;
 
 import com.qwikride.prc.domain.MembershipStatus;
+import com.qwikride.prc.domain.PricingPlanType;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import lombok.Data;
@@ -49,6 +50,10 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MembershipStatus membershipStatus = MembershipStatus.ENTRY;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'FREE'")
+    private PricingPlanType pricingPlan = PricingPlanType.FREE;
 
     @Column(precision = 12, scale = 2)
     private BigDecimal pendingBalance = BigDecimal.ZERO;

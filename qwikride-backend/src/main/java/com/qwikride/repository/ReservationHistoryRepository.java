@@ -10,4 +10,6 @@ import java.time.LocalDateTime;
 public interface ReservationHistoryRepository extends JpaRepository<ReservationHistory, Long> {
     long countByUserIdAndStatusAndCompletionTimeAfter(Long userId, ReservationHistory.ReservationStatus status,
             LocalDateTime time);
+
+    java.util.List<ReservationHistory> findByUserId(Long userId);
 }

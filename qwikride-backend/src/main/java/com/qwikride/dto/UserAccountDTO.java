@@ -1,5 +1,6 @@
 package com.qwikride.dto;
 
+import com.qwikride.prc.domain.PricingPlanType;
 import com.qwikride.model.User;
 import com.qwikride.prc.domain.MembershipStatus;
 import lombok.AllArgsConstructor;
@@ -22,7 +23,7 @@ public class UserAccountDTO {
     private User.UserRole activeRole;
     private Boolean hasDualRole;
     private MembershipStatus tier;
+    private PricingPlanType pricingPlan;
     private BigDecimal flexDollars;
     private BigDecimal pendingBalance;
 }
-

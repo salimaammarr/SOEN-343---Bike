@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { prcService, pricingAdminService } from '../services/api';
 import GuestHomeLink from '../components/GuestHomeLink';
@@ -124,6 +125,7 @@ const membershipOptions = ['ENTRY', 'BRONZE', 'SILVER', 'GOLD'];
 
 const Pricing = () => {
   const { user, updateUser } = useAuth();
+  const navigate = useNavigate();
   const isRider = user?.role === 'RIDER';
   const isOperator = user?.role === 'OPERATOR';
   const isAuthenticatedRider = useMemo(() => {
@@ -140,6 +142,8 @@ const Pricing = () => {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
 
   const [selectedEntryId, setSelectedEntryId] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -180,6 +184,31 @@ const Pricing = () => {
   const [planSubmitError, setPlanSubmitError] = useState(null);
   const [planSubmitSuccess, setPlanSubmitSuccess] = useState(null);
 
+  const handleJoinPlan = async (plan) => {
+    // Use subscriptionPrice if available, otherwise fallback to baseFee (legacy)
+    const price = plan.subscriptionPrice ?? plan.baseFee;
+    
+    // If price is 0 or null, switch directly
+    if (!price || Number(price) === 0) {
+        try {
+            await prcService.switchPlan({ planId: plan.planVersionId });
+            // Refresh user to update plan status
+            if (updateUser) {
+                updateUser(current => ({ ...current, pricingPlan: plan.planType }));
+            }
+            // Show success message (could be improved with a toast)
+            alert(`Successfully switched to ${plan.planName}`);
+        } catch (error) {
+            console.error("Failed to switch plan", error);
+            alert("Failed to switch plan. Please try again.");
+        }
+        return;
+    }
+
+    const amountInCents = Math.round(Number(price) * 100);
+    navigate('/payment', { state: { amount: amountInCents, planId: plan.planVersionId } });
+  };
+
   const fetchPlans = useCallback(async () => {
     setPlansLoading(true);
     setPlansError(null);
@@ -194,7 +223,7 @@ const Pricing = () => {
     }
   }, []);
 
-  const fetchBillingHistory = useCallback(async () => {
+  const fetchBillingHistory = useCallback(async (page = 0, append = false) => {
     // Don't make API calls if user is not authenticated or token is missing
     if (!isAuthenticatedRider || !user?.id || !localStorage.getItem('token')) {
       setHistory([]);
@@ -208,44 +237,53 @@ const Pricing = () => {
     setHistoryLoading(true);
     setHistoryError(null);
     try {
-      const { data } = await prcService.getBillingHistory(user.id);
-      const entries = Array.isArray(data) ? data : [];
-      setHistory(entries);
+      const { data } = await prcService.getBillingHistory(user.id, { page, size: 5 });
+      
+      let entries = [];
+      let hasMore = false;
+      
+      if (data && data.content) {
+          entries = data.content;
+          hasMore = !data.last;
+      } else if (Array.isArray(data)) {
+          entries = data;
+      }
 
-      const balance = computePendingBalance(entries);
-      setPendingBalance(balance);
-      if (updateUser) {
-        updateUser((current) => {
-          if (!current || current.id !== user.id) {
-            return current;
-          }
-          const currentBalance = Number(current.pendingBalance ?? 0);
-          if (Math.abs(currentBalance - balance) < 0.005) {
-            return current;
-          }
-          return { ...current, pendingBalance: balance };
-        });
+      setHistory(prev => append ? [...prev, ...entries] : entries);
+      setHistoryHasMore(hasMore);
+      setHistoryPage(page);
+
+      // Use user's pending balance if available
+      if (user.pendingBalance !== undefined) {
+          setPendingBalance(Number(user.pendingBalance));
+      } else if (page === 0) {
+          // Fallback for first page if user balance missing
+          const balance = computePendingBalance(entries);
+          setPendingBalance(balance);
       }
 
       setSelectedEntryId((current) => {
-        if (entries.length === 0) {
+        const allEntries = append ? [...history, ...entries] : entries;
+        if (allEntries.length === 0) {
           return null;
         }
-        if (current && entries.some((entry) => entry.ledgerEntryId === current)) {
+        if (current && allEntries.some((entry) => entry.ledgerEntryId === current)) {
           return current;
         }
-        return entries[0].ledgerEntryId;
+        return allEntries[0].ledgerEntryId;
       });
     } catch (error) {
       console.error('Failed to load billing history', error);
       setHistoryError('Unable to load billing history.');
-      setHistory([]);
-      setSelectedEntryId(null);
-      setPendingBalance(null);
+      if (!append) {
+          setHistory([]);
+          setSelectedEntryId(null);
+          setPendingBalance(null);
+      }
     } finally {
       setHistoryLoading(false);
     }
-  }, [isAuthenticatedRider, updateUser, user?.id]);
+  }, [isAuthenticatedRider, user?.id, user?.pendingBalance, history]);
 
   const fetchDisputes = useCallback(async () => {
     // Don't make API calls if user is not authenticated or token is missing
@@ -412,27 +450,9 @@ const Pricing = () => {
     if (!activeEntry) {
       return;
     }
-    setSettlementLoading(true);
-    setBillingActionError(null);
-    setBillingActionMessage(null);
-    try {
-      const { data } = await prcService.settlePayment(activeEntry.ledgerEntryId, {
-        paymentMethodToken: 'saved-default',
-      });
-      if (data?.success) {
-        setBillingActionMessage(`Payment processed successfully! Transaction ID: ${data.transactionId}`);
-      } else {
-        setBillingActionError(
-          data?.failureReason ? getPaymentErrorMessage(data.failureReason) : 'Payment could not be processed.'
-        );
-      }
-      await fetchBillingHistory();
-    } catch (error) {
-      console.error('Failed to settle payment', error);
-      setBillingActionError('Payment failed. Please try again or contact support.');
-    } finally {
-      setSettlementLoading(false);
-    }
+    // Navigate to payment page with the amount (converted to cents)
+    const amountInCents = Math.round(activeEntry.total * 100);
+    navigate('/payment', { state: { amount: amountInCents, ledgerEntryId: activeEntry.ledgerEntryId } });
   };
 
   const handleDownloadReceipt = async () => {
@@ -671,8 +691,15 @@ const Pricing = () => {
             )}
           </div>
           {isAuthenticatedRider && pendingBalance !== null && (
-            <div className="mb-6 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-100">
-              Pending balance: {formatMoney(pendingBalance)}
+            <div className="mb-6 flex flex-wrap gap-4">
+              <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-100">
+                Pending balance: {formatMoney(pendingBalance)}
+              </div>
+              {user?.flexDollars > 0 && (
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900 dark:border-green-700 dark:bg-green-900/30 dark:text-green-100">
+                  Flex Dollars: {formatMoney(user.flexDollars)}
+                </div>
+              )}
             </div>
           )}
 
@@ -711,7 +738,7 @@ const Pricing = () => {
 
                   <div className="grid grid-cols-1 gap-4 rounded-xl bg-gray-50 p-4 dark:bg-gray-900/40 sm:grid-cols-3">
                     <div>
-                      <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Base Fee</span>
+                      <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Unlock Fee</span>
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatMoney(plan.baseFee)}</p>
                     </div>
                     <div>
@@ -719,8 +746,12 @@ const Pricing = () => {
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatMoney(plan.perMinuteRate)}</p>
                     </div>
                     <div>
-                      <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">E-Bike Surcharge</span>
-                      <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatMoney(plan.ebikeSurcharge)}</p>
+                      <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Subscription</span>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {plan.subscriptionPrice && Number(plan.subscriptionPrice) > 0 
+                          ? formatMoney(plan.subscriptionPrice) 
+                          : 'None'}
+                      </p>
                     </div>
                   </div>
 
@@ -754,9 +785,27 @@ const Pricing = () => {
 
                   <div className="text-xs text-gray-500 dark:text-gray-400">
                     {plan.effectiveTo ? (
-                      <>Plan scheduled to end on {formatDate(plan.effectiveTo)}.</>
+                      <>Plan valid until {formatDate(plan.effectiveTo)}.</>
                     ) : (
-                      <>Plan is currently active.</>
+                      <>Plan available for purchase.</>
+                    )}
+                  </div>
+
+                  <div className="mt-6">
+                    {user?.pricingPlan === plan.planType ? (
+                      <button
+                        disabled
+                        className="w-full rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400"
+                      >
+                        Current Plan
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleJoinPlan(plan)}
+                        className="w-full rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-primary-500 dark:hover:bg-primary-600"
+                      >
+                        Join Plan
+                      </button>
                     )}
                   </div>
                 </div>
@@ -831,6 +880,16 @@ const Pricing = () => {
                       </button>
                     );
                   })}
+                  {historyHasMore && (
+                    <button
+                      type="button"
+                      onClick={() => fetchBillingHistory(historyPage + 1, true)}
+                      disabled={historyLoading}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    >
+                      {historyLoading ? 'Loading more...' : 'Load More'}
+                    </button>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-gray-700 dark:bg-gray-800">

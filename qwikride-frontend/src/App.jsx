@@ -12,6 +12,8 @@ import BikeManagement from './pages/BikeManagement';
 import RideHistory from './pages/RideHistory';
 import Pricing from './pages/Pricing';
 import AccountInformation from './pages/AccountInformation';
+import PaymentPage from './pages/PaymentPage';
+import PaymentSuccess from './pages/PaymentSuccess';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -66,6 +68,22 @@ function AnimatedRoutes() {
           element={
             <ProtectedRoute>
               <AccountInformation />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment"
+          element={
+            <ProtectedRoute>
+              <PaymentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment-success"
+          element={
+            <ProtectedRoute>
+              <PaymentSuccess />
             </ProtectedRoute>
           }
         />

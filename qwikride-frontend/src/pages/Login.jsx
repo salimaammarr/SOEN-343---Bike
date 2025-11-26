@@ -28,16 +28,18 @@ const Login = () => {
 
     try {
       const response = await authService.login(formData);
-      const { token, username, fullName, role, id, tier, tierChangeNotification, hasDualRole, primaryRole } = response.data;
+      const { token, username, fullName, role, id, tier, pricingPlan, tierChangeNotification, hasDualRole, primaryRole, flexDollars } = response.data;
       login(token, { 
         username, 
         fullName, 
         role, 
         id, 
         tier, 
+        pricingPlan,
         tierChangeNotification,
         hasDualRole: hasDualRole || false,
-        primaryRole: primaryRole || role
+        primaryRole: primaryRole || role,
+        flexDollars
       });
       
       // Show tier change notification if present
@@ -46,7 +48,26 @@ const Login = () => {
         sessionStorage.setItem('tierNotification', tierChangeNotification);
       }
       
-      navigate('/dashboard');
+      // Check for intended plan from registration
+      const intendedPlan = location.state?.intendedPlan;
+      if (intendedPlan && role === 'RIDER') {
+        // Calculate amount in cents
+        const amountInCents = Math.round(Number(intendedPlan.subscriptionPrice) * 100);
+        navigate('/payment', { 
+          state: { 
+            amount: amountInCents, 
+            planId: intendedPlan.planVersionId 
+          } 
+        });
+        return;
+      }
+
+      // If user has no tier (new user), redirect to pricing
+      if (!tier && role === 'RIDER') {
+        navigate('/pricing');
+      } else {
+        navigate('/dashboard');
+      }
     } catch {
       setError('Invalid username or password');
     } finally {

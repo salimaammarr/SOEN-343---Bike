@@ -1,5 +1,7 @@
 package com.qwikride.service;
 
+import com.qwikride.dto.Co2MonthlyStatsDTO;
+import com.qwikride.dto.Co2YearlyStatsDTO;
 import com.qwikride.dto.RideHistoryFilterDTO;
 import com.qwikride.dto.RideHistoryResponseDTO;
 import com.qwikride.dto.RideStatisticsDTO;
@@ -16,7 +18,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Month;
+import java.time.format.TextStyle;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -84,6 +93,7 @@ public class RideHistoryService {
                     .totalCost(0.0)
                     .averageDuration(0.0)
                     .averageDistance(0.0)
+                    .totalCo2Saved(0.0)
                     .build();
         }
 
@@ -92,6 +102,16 @@ public class RideHistoryService {
                 .filter(r -> r.getDistanceKm() != null)
                 .mapToDouble(RideHistory::getDistanceKm)
                 .sum();
+
+        double totalCo2Saved = rides.stream()
+                .filter(r -> r.getDistanceKm() != null)
+                .mapToDouble(r -> {
+                    double distance = r.getDistanceKm();
+                    double savingsPerKm = "E_BIKE".equalsIgnoreCase(r.getBikeType()) ? 0.135 : 0.150;
+                    return distance * savingsPerKm;
+                })
+                .sum();
+
         double totalCost = rides.stream()
                 .filter(r -> r.getCost() != null)
                 .mapToDouble(RideHistory::getCost)
@@ -138,7 +158,79 @@ public class RideHistoryService {
                 .mostUsedStartStation(mostUsedStartStation)
                 .mostUsedEndStation(mostUsedEndStation)
                 .favoriteBikeType(favoriteBikeType)
+                .totalCo2Saved(totalCo2Saved)
                 .build();
+    }
+
+    /**
+     * Get CO2 statistics grouped by year for a user.
+     */
+    public List<Co2YearlyStatsDTO> getCo2StatisticsByYear(Long userId) {
+        List<RideHistory> rides = rideHistoryRepository.findByUserIdOrderByStartTimeDesc(userId);
+
+        Map<Integer, Double> stats = rides.stream()
+                .filter(r -> r.getDistanceKm() != null && r.getStartTime() != null)
+                .collect(Collectors.groupingBy(
+                        r -> r.getStartTime().getYear(),
+                        Collectors.summingDouble(r -> {
+                            double distance = r.getDistanceKm();
+                            double savingsPerKm = "E_BIKE".equalsIgnoreCase(r.getBikeType()) ? 0.135 : 0.150;
+                            return distance * savingsPerKm;
+                        })));
+
+        return stats.entrySet().stream()
+                .map(entry -> Co2YearlyStatsDTO.builder()
+                        .year(entry.getKey())
+                        .co2Saved(entry.getValue())
+                        .build())
+                .sorted(Comparator.comparing(Co2YearlyStatsDTO::getYear))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get cumulative CO2 statistics by month for a specific year.
+     */
+    public List<Co2MonthlyStatsDTO> getCo2MonthlyStats(Long userId, int year) {
+        LocalDateTime startOfYear = LocalDateTime.of(year, 1, 1, 0, 0);
+        LocalDateTime endOfYear = LocalDateTime.of(year, 12, 31, 23, 59, 59);
+
+        List<RideHistory> rides = rideHistoryRepository.findByUserIdAndStartTimeBetweenOrderByStartTimeDesc(
+                userId, startOfYear, endOfYear);
+
+        // Initialize map for all months
+        Map<Month, Double> monthlyTotals = new EnumMap<>(Month.class);
+        for (Month m : Month.values()) {
+            monthlyTotals.put(m, 0.0);
+        }
+
+        // Calculate monthly totals
+        for (RideHistory ride : rides) {
+            if (ride.getDistanceKm() != null && ride.getStartTime() != null) {
+                double distance = ride.getDistanceKm();
+                double savingsPerKm = "E_BIKE".equalsIgnoreCase(ride.getBikeType()) ? 0.135 : 0.150;
+                double co2 = distance * savingsPerKm;
+
+                Month month = ride.getStartTime().getMonth();
+                monthlyTotals.merge(month, co2, Double::sum);
+            }
+        }
+
+        // Build result with cumulative totals
+        List<Co2MonthlyStatsDTO> result = new ArrayList<>();
+        double cumulative = 0.0;
+
+        for (Month m : Month.values()) {
+            double monthly = monthlyTotals.get(m);
+            cumulative += monthly;
+
+            result.add(Co2MonthlyStatsDTO.builder()
+                    .month(m.getDisplayName(TextStyle.SHORT, Locale.ENGLISH))
+                    .monthlyCo2Saved(monthly)
+                    .cumulativeCo2Saved(cumulative)
+                    .build());
+        }
+
+        return result;
     }
 
     /**
@@ -192,7 +284,7 @@ public class RideHistoryService {
     private RideHistoryFilterCriteria buildFilterCriteria(Long userId, RideHistoryFilterDTO filter) {
         // Use userId from filter if provided, otherwise use the parameter
         Long effectiveUserId = (filter != null && filter.getUserId() != null) ? filter.getUserId() : userId;
-        
+
         RideHistoryFilterCriteria.RideHistoryFilterCriteriaBuilder builder = RideHistoryFilterCriteria.builder()
                 .userId(effectiveUserId);
 
@@ -215,6 +307,9 @@ public class RideHistoryService {
             if (filter.getBikeType() != null) {
                 builder.bikeType(filter.getBikeType());
             }
+            if (filter.getTripId() != null) {
+                builder.tripId(filter.getTripId());
+            }
         }
 
         return builder.build();
@@ -230,6 +325,11 @@ public class RideHistoryService {
         // Apply user filter
         if (criteria.getUserId() != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("userId"), criteria.getUserId()));
+        }
+
+        // Apply trip ID filter
+        if (criteria.getTripId() != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("id"), criteria.getTripId()));
         }
 
         // Apply all filter strategies

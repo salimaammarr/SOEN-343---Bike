@@ -45,6 +45,7 @@ public class PricingService implements EventSubscriber {
         SelectionInput selectionInput = tripFactsFactory.buildSelectionInput(
                 tripFacts.getEndTime(),
                 tripFacts.getMembershipStatus(),
+                tripFacts.getPricingPlanType(),
                 tripFacts.getCityId());
 
         FinalizedBill bill = pricingEngine.price(tripFacts, selectionInput);

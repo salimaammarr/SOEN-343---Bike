@@ -32,27 +32,29 @@ public class AuthenticationService {
 
         // Evaluate and update tier for riders (or operators acting as riders)
         String tierChangeNotification = null;
-        
-        // Operators can also be riders, so evaluate tier if they have rider capabilities
-        boolean isRider = user.getRole() == User.UserRole.RIDER || 
-                        (user.getRole() == User.UserRole.OPERATOR && user.getActiveRole() == User.UserRole.RIDER);
-        
+
+        // Operators can also be riders, so evaluate tier if they have rider
+        // capabilities
+        boolean isRider = user.getRole() == User.UserRole.RIDER ||
+                (user.getRole() == User.UserRole.OPERATOR && user.getActiveRole() == User.UserRole.RIDER);
+
         if (isRider || user.getRole() == User.UserRole.RIDER) {
             LoyaltyTierService.TierEvaluationResult tierResult = loyaltyTierService.evaluateAndUpdateTier(user.getId());
-            
+
             // Refresh user to get updated tier
             user = userRepository.findById(user.getId())
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
-            
+
             if (tierResult.isChanged()) {
                 MembershipStatus newTier = tierResult.getNewTier();
                 MembershipStatus oldTier = tierResult.getPreviousTier();
-                
+
                 if (isTierUpgrade(oldTier, newTier)) {
-                    tierChangeNotification = String.format("Congratulations! You've been upgraded to %s tier!", 
+                    tierChangeNotification = String.format("Congratulations! You've been upgraded to %s tier!",
                             newTier.name());
                 } else {
-                    tierChangeNotification = String.format("Your tier has changed from %s to %s based on your recent activity.", 
+                    tierChangeNotification = String.format(
+                            "Your tier has changed from %s to %s based on your recent activity.",
                             oldTier.name(), newTier.name());
                 }
             }
@@ -60,7 +62,7 @@ public class AuthenticationService {
 
         // Determine active role: use activeRole if set, otherwise use primary role
         User.UserRole activeRole = user.getActiveRole() != null ? user.getActiveRole() : user.getRole();
-        
+
         // For operators, initialize activeRole to OPERATOR if not set
         if (user.getRole() == User.UserRole.OPERATOR && user.getActiveRole() == null) {
             user.setActiveRole(User.UserRole.OPERATOR);
@@ -69,10 +71,10 @@ public class AuthenticationService {
         }
 
         String token = jwtUtil.generateToken(user.getUsername(), activeRole.name());
-        
+
         // Determine if user has dual role capability
         boolean hasDualRole = user.getRole() == User.UserRole.OPERATOR;
-        
+
         return new LoginResponseDTO(
                 token,
                 user.getUsername(),
@@ -80,19 +82,20 @@ public class AuthenticationService {
                 activeRole.name(),
                 user.getId(),
                 user.getMembershipStatus(),
+                user.getPricingPlan(),
                 tierChangeNotification,
                 hasDualRole,
-                user.getRole().name() // Include primary role for reference
-        );
+                user.getRole().name(), // Include primary role for reference
+                user.getFlexDollars());
     }
-    
+
     private boolean isTierUpgrade(MembershipStatus oldTier, MembershipStatus newTier) {
         // Compare tier levels: ENTRY < BRONZE < SILVER < GOLD
         int oldLevel = getTierLevel(oldTier);
         int newLevel = getTierLevel(newTier);
         return newLevel > oldLevel;
     }
-    
+
     private int getTierLevel(MembershipStatus tier) {
         return switch (tier) {
             case ENTRY -> 0;
@@ -117,19 +120,20 @@ public class AuthenticationService {
         user.setUsername(dto.getUsername());
         user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
         user.setPaymentInfo(dto.getPaymentInfo());
-        user.setRole(User.UserRole.RIDER); 
+        user.setRole(User.UserRole.RIDER);
 
         userRepository.save(user);
     }
 
     /**
-     * Toggle the active role for dual-role users (OPERATOR can switch to RIDER and back).
+     * Toggle the active role for dual-role users (OPERATOR can switch to RIDER and
+     * back).
      */
     @Transactional
     public LoginResponseDTO toggleRole(User.UserRole newRole) {
-        org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+
         if (authentication == null) {
             throw new IllegalArgumentException("User not authenticated");
         }
@@ -159,16 +163,17 @@ public class AuthenticationService {
             LoyaltyTierService.TierEvaluationResult tierResult = loyaltyTierService.evaluateAndUpdateTier(user.getId());
             user = userRepository.findById(user.getId())
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
-            
+
             if (tierResult.isChanged()) {
                 MembershipStatus newTier = tierResult.getNewTier();
                 MembershipStatus oldTier = tierResult.getPreviousTier();
-                
+
                 if (isTierUpgrade(oldTier, newTier)) {
-                    tierChangeNotification = String.format("Congratulations! You've been upgraded to %s tier!", 
+                    tierChangeNotification = String.format("Congratulations! You've been upgraded to %s tier!",
                             newTier.name());
                 } else {
-                    tierChangeNotification = String.format("Your tier has changed from %s to %s based on your recent activity.", 
+                    tierChangeNotification = String.format(
+                            "Your tier has changed from %s to %s based on your recent activity.",
                             oldTier.name(), newTier.name());
                 }
             }
@@ -181,19 +186,20 @@ public class AuthenticationService {
                 newRole.name(),
                 user.getId(),
                 user.getMembershipStatus(),
+                user.getPricingPlan(),
                 tierChangeNotification,
                 true, // hasDualRole
-                user.getRole().name() // primaryRole
-        );
+                user.getRole().name(), // primaryRole
+                user.getFlexDollars());
     }
 
     /**
      * Get current user's account information including flex dollars and tier.
      */
     public UserAccountDTO getCurrentUserAccount() {
-        org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+
         if (authentication == null) {
             throw new IllegalArgumentException("User not authenticated");
         }
@@ -213,6 +219,7 @@ public class AuthenticationService {
                 .activeRole(activeRole)
                 .hasDualRole(hasDualRole)
                 .tier(user.getMembershipStatus())
+                .pricingPlan(user.getPricingPlan())
                 .flexDollars(user.getFlexDollars() != null ? user.getFlexDollars() : java.math.BigDecimal.ZERO)
                 .pendingBalance(user.getPendingBalance() != null ? user.getPendingBalance() : java.math.BigDecimal.ZERO)
                 .build();
@@ -222,9 +229,9 @@ public class AuthenticationService {
      * Get tier progress information for the current user.
      */
     public com.qwikride.dto.TierProgressDTO getTierProgress() {
-        org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+
         if (authentication == null) {
             throw new IllegalArgumentException("User not authenticated");
         }

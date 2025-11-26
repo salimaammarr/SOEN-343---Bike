@@ -20,6 +20,7 @@ const RideHistory = () => {
     status: '',
     bikeType: '',
     userId: '',
+    tripId: '',
   });
 
   useEffect(() => {
@@ -113,6 +114,7 @@ const RideHistory = () => {
       status: '',
       bikeType: '',
       userId: '',
+      tripId: '',
     });
   };
 
@@ -222,7 +224,7 @@ const RideHistory = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8"
+            className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8"
           >
             <div className="card p-6">
               <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Rides</div>
@@ -248,6 +250,12 @@ const RideHistory = () => {
                 {statistics.averageDuration ? formatDuration(statistics.averageDuration) : '0m'}
               </div>
             </div>
+            <div className="card p-6">
+              <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total CO2 Saved</div>
+              <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                {statistics.totalCo2Saved ? `${statistics.totalCo2Saved.toFixed(2)} kg` : '0 kg'}
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -259,7 +267,20 @@ const RideHistory = () => {
           className="card p-6 mb-8"
         >
           <h2 className="text-xl font-bold mb-4 text-primary-900 dark:text-gray-100">Filters</h2>
-          <div className={`grid grid-cols-1 ${user?.role === 'OPERATOR' ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Trip ID
+              </label>
+              <input
+                type="number"
+                name="tripId"
+                value={filters.tripId}
+                onChange={handleFilterChange}
+                placeholder="Search ID..."
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
             {user?.role === 'OPERATOR' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -384,6 +405,9 @@ const RideHistory = () => {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
+                      <div className="px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold">
+                        Trip #{ride.id}
+                      </div>
                       {user?.role === 'OPERATOR' && ride.userId && (
                         <div className="px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 text-xs font-semibold">
                           User #{ride.userId}
@@ -404,7 +428,7 @@ const RideHistory = () => {
                         </div>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                       <div>
                         <div className="text-gray-600 dark:text-gray-400 mb-1">Start Time</div>
                         <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -432,6 +456,14 @@ const RideHistory = () => {
                           <div className="text-gray-600 dark:text-gray-400 mb-1">Distance</div>
                           <div className="font-semibold text-gray-900 dark:text-gray-100">
                             {ride.distanceKm.toFixed(2)} km
+                          </div>
+                        </div>
+                      )}
+                      {ride.co2Saved !== undefined && (
+                        <div>
+                          <div className="text-gray-600 dark:text-gray-400 mb-1">CO2 Saved</div>
+                          <div className="font-semibold text-green-600 dark:text-green-400">
+                            {ride.co2Saved.toFixed(3)} kg
                           </div>
                         </div>
                       )}

@@ -93,8 +93,10 @@ public class LoyaltyTierService {
         }
 
         // Check that all bikes are returned (no active rides)
+        // Note: We check for > 1 because during the pricing calculation (at trip end),
+        // the current ride is still considered "active" in the database.
         long activeRides = rideHistoryRepository.countByUserIdAndEndTimeIsNull(userId);
-        if (activeRides > 0) {
+        if (activeRides > 1) {
             log.debug("User {} failed Bronze: Has {} active rides (bikes not returned)", userId, activeRides);
             return false;
         }
@@ -262,10 +264,20 @@ public class LoyaltyTierService {
         // Count trips in last year
         long tripsCompleted = countCompletedTrips(userId, oneYearAgo, LocalDateTime.now());
 
+        // Check for missed reservations
+        long missedReservations = reservationHistoryRepository.countByUserIdAndStatusAndCompletionTimeAfter(
+                userId, ReservationHistory.ReservationStatus.EXPIRED, oneYearAgo);
+        boolean hasMissedReservations = missedReservations > 0;
+
+        // Check for successful reservations
+        long successfulReservations = reservationHistoryRepository.countByUserIdAndStatusAndCompletionTimeAfter(
+                userId, ReservationHistory.ReservationStatus.CLAIMED, oneYearAgo);
+
         MembershipStatus nextTier = getNextTier(currentTier);
         String progressMessage = "";
         double progressPercentage = 0.0;
         int tripsRequired = 0;
+        int reservationsRequired = 0;
 
         if (nextTier == null) {
             // Already at max tier
@@ -280,14 +292,24 @@ public class LoyaltyTierService {
                     break;
                 case BRONZE:
                     tripsRequired = 10;
-                    int progress = (int) Math.min(100, (tripsCompleted * 100.0 / tripsRequired));
-                    progressPercentage = progress;
-                    progressMessage = String.format("%d / %d trips completed", tripsCompleted, tripsRequired);
+                    if (hasMissedReservations) {
+                        progressMessage = "Cannot upgrade: You have missed reservations in the last year.";
+                        progressPercentage = 0.0;
+                    } else {
+                        int progress = (int) Math.min(100, (tripsCompleted * 100.0 / tripsRequired));
+                        progressPercentage = progress;
+                        progressMessage = String.format("%d / %d trips completed", tripsCompleted, tripsRequired);
+                    }
                     break;
                 case SILVER:
+                    reservationsRequired = 5;
                     if (!meetsBronzeRequirements(userId, oneYearAgo)) {
                         progressMessage = "Meet Bronze tier requirements first";
                         progressPercentage = 0.0;
+                    } else if (successfulReservations <= reservationsRequired) {
+                        progressMessage = String.format("Need more claimed reservations (%d/%d)",
+                                successfulReservations, reservationsRequired);
+                        progressPercentage = (successfulReservations * 100.0 / reservationsRequired);
                     } else {
                         // Check monthly requirement
                         boolean meetsMonthly = checkMonthlyTripRequirement(userId, threeMonthsAgo, 5);
@@ -324,10 +346,10 @@ public class LoyaltyTierService {
                 .nextTier(nextTier)
                 .tripsCompleted((int) tripsCompleted)
                 .tripsRequired(tripsRequired)
-                .hasMissedReservations(false)
-                .hasCancelledRides(false)
-                .successfulReservations(0)
-                .reservationsRequired(0)
+                .hasMissedReservations(hasMissedReservations)
+                .hasCancelledRides(false) // Not tracking cancelled rides for now
+                .successfulReservations((int) successfulReservations)
+                .reservationsRequired(reservationsRequired)
                 .progressMessage(progressMessage)
                 .progressPercentage(progressPercentage)
                 .build();

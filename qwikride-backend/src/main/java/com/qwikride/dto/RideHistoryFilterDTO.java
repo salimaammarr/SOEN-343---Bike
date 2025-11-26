@@ -20,17 +20,17 @@ public class RideHistoryFilterDTO {
     private Boolean startStationOnly;
     private RideHistory.RideStatus status;
     private String bikeType;
-    
+    private Long tripId;
+
     @Builder.Default
     private Integer page = 0;
-    
+
     @Builder.Default
     private Integer size = 20;
-    
+
     @Builder.Default
     private String sortBy = "startTime";
-    
+
     @Builder.Default
     private String sortDirection = "DESC";
 }
-

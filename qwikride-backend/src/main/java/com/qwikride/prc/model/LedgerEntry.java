@@ -42,13 +42,13 @@ public class LedgerEntry {
     @Column(nullable = false)
     private String planName;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private UUID bikeId;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Long startStationId;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Long endStationId;
 
     @Column(nullable = false)

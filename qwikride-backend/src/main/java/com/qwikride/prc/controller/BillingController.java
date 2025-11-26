@@ -11,6 +11,10 @@ import com.qwikride.prc.service.BillingDocumentService;
 import com.qwikride.prc.service.PaymentSettlementService;
 import com.qwikride.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -43,15 +47,16 @@ public class BillingController {
 
     @GetMapping("/history/{riderId}")
     @PreAuthorize("hasAuthority('RIDER') or hasAuthority('OPERATOR')")
-    public ResponseEntity<List<BillingEntryResponse>> getHistory(
+    public ResponseEntity<Page<BillingEntryResponse>> getHistory(
             @PathVariable Long riderId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
+            @PageableDefault(size = 10, sort = "startTime", direction = Sort.Direction.DESC) Pageable pageable) {
 
         assertRiderScope(riderId);
         LocalDateTime normalizedStart = normalizeStart(start);
         LocalDateTime normalizedEnd = normalizeEnd(end);
-        return ResponseEntity.ok(billingLedgerService.getHistory(riderId, normalizedStart, normalizedEnd));
+        return ResponseEntity.ok(billingLedgerService.getHistory(riderId, normalizedStart, normalizedEnd, pageable));
     }
 
     @GetMapping("/summary/{ledgerEntryId}")

@@ -35,6 +35,7 @@ public class RideHistoryController {
             @RequestParam(required = false) Boolean startStationOnly,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String bikeType,
+            @RequestParam(required = false) Long tripId,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size) {
 
@@ -80,6 +81,8 @@ public class RideHistoryController {
         }
         if (bikeType != null && !bikeType.isEmpty())
             builder.bikeType(bikeType);
+        if (tripId != null)
+            builder.tripId(tripId);
 
         RideHistoryFilterDTO filter = builder.build();
         List<RideHistoryResponseDTO> history = rideHistoryService.getUserRideHistory(userId, filter);
@@ -99,6 +102,7 @@ public class RideHistoryController {
             @RequestParam(required = false) Boolean startStationOnly,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String bikeType,
+            @RequestParam(required = false) Long tripId,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size) {
 
@@ -144,6 +148,8 @@ public class RideHistoryController {
         }
         if (bikeType != null && !bikeType.isEmpty())
             builder.bikeType(bikeType);
+        if (tripId != null)
+            builder.tripId(tripId);
 
         RideHistoryFilterDTO filter = builder.build();
         List<RideHistoryResponseDTO> history = rideHistoryService.getAllRideHistories(filter);
@@ -171,6 +177,27 @@ public class RideHistoryController {
     }
 
     /**
+     * Get CO2 statistics grouped by year for a user.
+     */
+    @GetMapping("/user/{userId}/statistics/co2/year")
+    @PreAuthorize("hasAuthority('RIDER') or hasAuthority('OPERATOR')")
+    public ResponseEntity<List<com.qwikride.dto.Co2YearlyStatsDTO>> getCo2StatisticsByYear(@PathVariable Long userId) {
+        return ResponseEntity.ok(rideHistoryService.getCo2StatisticsByYear(userId));
+    }
+
+    /**
+     * Get CO2 statistics grouped by month for a specific year.
+     */
+    @GetMapping("/user/{userId}/statistics/co2/monthly")
+    @PreAuthorize("hasAuthority('RIDER') or hasAuthority('OPERATOR')")
+    public ResponseEntity<List<com.qwikride.dto.Co2MonthlyStatsDTO>> getCo2MonthlyStats(
+            @PathVariable Long userId,
+            @RequestParam(required = false) Integer year) {
+        int targetYear = (year != null) ? year : java.time.Year.now().getValue();
+        return ResponseEntity.ok(rideHistoryService.getCo2MonthlyStats(userId, targetYear));
+    }
+
+    /**
      * Get ride history for dual-role users based on their view preference.
      * When viewAll=true: Returns all trips (operator view)
      * When viewAll=false: Returns only the user's own trips (rider view)
@@ -186,6 +213,7 @@ public class RideHistoryController {
             @RequestParam(required = false) Boolean startStationOnly,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String bikeType,
+            @RequestParam(required = false) Long tripId,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size) {
 
@@ -235,6 +263,8 @@ public class RideHistoryController {
         }
         if (bikeType != null && !bikeType.isEmpty())
             builder.bikeType(bikeType);
+        if (tripId != null)
+            builder.tripId(tripId);
 
         RideHistoryFilterDTO filter = builder.build();
         List<RideHistoryResponseDTO> history = rideHistoryService.getAllRideHistories(filter);

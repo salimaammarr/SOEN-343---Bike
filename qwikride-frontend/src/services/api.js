@@ -31,6 +31,10 @@ export const authService = {
     const response = await api.post("/auth/toggle-role", { role });
     return response;
   },
+  getAccount: async () => {
+    const response = await api.get("/auth/account");
+    return response;
+  },
 };
 
 export const rideHistoryService = {
@@ -42,6 +46,7 @@ export const rideHistoryService = {
     if (filters.bikeType) params.append("bikeType", filters.bikeType);
     if (filters.page) params.append("page", filters.page);
     if (filters.size) params.append("size", filters.size);
+    if (filters.tripId) params.append("tripId", filters.tripId);
 
     return api.get(`/history/user/${userId}?${params.toString()}`);
   },
@@ -54,6 +59,7 @@ export const rideHistoryService = {
     if (filters.userId) params.append("userId", filters.userId);
     if (filters.page) params.append("page", filters.page);
     if (filters.size) params.append("size", filters.size);
+    if (filters.tripId) params.append("tripId", filters.tripId);
 
     return api.get(`/history/all?${params.toString()}`);
   },
@@ -67,19 +73,28 @@ export const rideHistoryService = {
     if (filters.bikeType) params.append("bikeType", filters.bikeType);
     if (filters.page) params.append("page", filters.page);
     if (filters.size) params.append("size", filters.size);
+    if (filters.tripId) params.append("tripId", filters.tripId);
 
     return api.get(`/history/dual-role?${params.toString()}`);
   },
   getRideHistoryById: (id) => api.get(`/history/${id}`),
   getRideStatistics: (userId) => api.get(`/history/user/${userId}/statistics`),
+  getCo2StatisticsByYear: (userId) =>
+    api.get(`/history/user/${userId}/statistics/co2/year`),
+  getCo2MonthlyStats: (userId, year) => {
+    const params = year ? `?year=${year}` : "";
+    return api.get(`/history/user/${userId}/statistics/co2/monthly${params}`);
+  },
 };
 
 export const prcService = {
   getPricingPlans: () => api.get("/prc/pricing/plans"),
-  getBillingHistory: (riderId, { start, end } = {}) => {
+  getBillingHistory: (riderId, { start, end, page, size } = {}) => {
     const params = new URLSearchParams();
     if (start) params.append("start", start);
     if (end) params.append("end", end);
+    if (page !== undefined) params.append("page", page);
+    if (size !== undefined) params.append("size", size);
     const query = params.toString();
     return api.get(
       `/prc/billing/history/${riderId}${query ? `?${query}` : ""}`
@@ -105,6 +120,7 @@ export const prcService = {
   listOpenDisputes: () => api.get("/prc/disputes/open"),
   resolveDispute: (ticketId, payload) =>
     api.post(`/prc/disputes/${ticketId}/resolve`, payload),
+  switchPlan: (payload) => api.post("/payments/switch-plan", payload),
 };
 
 export const pricingAdminService = {

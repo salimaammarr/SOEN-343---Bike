@@ -33,6 +33,7 @@ const AccountInformation = () => {
           api.get('/auth/account/tier-progress').catch(() => null) // Optional, don't fail if it errors
         ]);
         setAccountData(accountResponse.data);
+        console.log('Account Data:', accountResponse.data); // Debugging
         if (progressResponse?.data) {
           setTierProgress(progressResponse.data);
         }
@@ -208,6 +209,22 @@ const AccountInformation = () => {
                   </span>
                 </p>
               </div>
+              <div>
+                <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Current Plan</label>
+                <p className="text-lg font-medium text-primary-900 dark:text-gray-100">
+                  {account?.pricingPlan === 'PRO' ? 'Yearly Plan' : 
+                   account?.pricingPlan === 'REGULAR' ? 'Monthly Plan' : 
+                   'Pay As You Go'}
+                </p>
+              </div>
+              {account?.flexDollars > 0 && (
+                <div>
+                  <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Flex Dollars</label>
+                  <p className="text-lg font-medium text-green-600 dark:text-green-400">
+                    ${Number(account.flexDollars).toFixed(2)}
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
 

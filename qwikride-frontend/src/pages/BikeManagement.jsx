@@ -399,12 +399,26 @@ const BikeManagement = () => {
 
   // Get displayable bikes (at stations or IN_USE)
   const displayableBikes = useMemo(() => {
-    return uniqueBikes.filter(bike => {
+    const filtered = uniqueBikes.filter(bike => {
       if (bike.stationId) return true; // At a station
       if (bike.status === 'IN_USE') return true; // In use
       return false; // Orphaned bikes
     });
-  }, [uniqueBikes]);
+
+    // Sort: User's active bike first
+    return filtered.sort((a, b) => {
+      const isUserBikeA = a.status === 'IN_USE' && 
+                          a.currentUserId && 
+                          Number(a.currentUserId) === Number(user?.id);
+      const isUserBikeB = b.status === 'IN_USE' && 
+                          b.currentUserId && 
+                          Number(b.currentUserId) === Number(user?.id);
+      
+      if (isUserBikeA && !isUserBikeB) return -1;
+      if (!isUserBikeA && isUserBikeB) return 1;
+      return 0;
+    });
+  }, [uniqueBikes, user?.id]);
 
   // Get user's active bike
   const userActiveBike = useMemo(() => {

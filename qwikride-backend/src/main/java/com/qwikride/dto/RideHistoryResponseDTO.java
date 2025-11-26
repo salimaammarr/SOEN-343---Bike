@@ -26,8 +26,17 @@ public class RideHistoryResponseDTO {
     private Double cost;
     private RideHistory.RideStatus status;
     private String bikeType;
+    private Double co2Saved; // in kg
 
     public static RideHistoryResponseDTO fromEntity(RideHistory rideHistory) {
+        double distance = rideHistory.getDistanceKm() != null ? rideHistory.getDistanceKm() : 0.0;
+        // Calculate CO2 saved:
+        // Standard car emits ~150g/km
+        // E-bike emits ~15g/km (net savings 135g/km)
+        // Standard bike emits 0g/km (net savings 150g/km)
+        double savingsPerKm = "E_BIKE".equalsIgnoreCase(rideHistory.getBikeType()) ? 0.135 : 0.150;
+        double co2Saved = distance * savingsPerKm;
+
         return RideHistoryResponseDTO.builder()
                 .id(rideHistory.getId())
                 .userId(rideHistory.getUserId())
@@ -41,7 +50,7 @@ public class RideHistoryResponseDTO {
                 .cost(rideHistory.getCost())
                 .status(rideHistory.getStatus())
                 .bikeType(rideHistory.getBikeType())
+                .co2Saved(co2Saved)
                 .build();
     }
 }
-

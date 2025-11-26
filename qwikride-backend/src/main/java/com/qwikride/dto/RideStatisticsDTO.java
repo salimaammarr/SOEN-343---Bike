@@ -18,5 +18,5 @@ public class RideStatisticsDTO {
     private Long mostUsedStartStation;
     private Long mostUsedEndStation;
     private String favoriteBikeType;
+    private Double totalCo2Saved;
 }
-

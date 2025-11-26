@@ -1,11 +1,43 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { PAGE_VARIANTS } from '../constants/animations';
-import { GridBackground, AnimatedBlob } from '../components';
+import { GridBackground, AnimatedBlob, CO2GraphModal } from '../components';
+import { rideHistoryService } from '../services/api';
 
 const DashboardHome = ({ onSwitchToMap }) => {
   const { user } = useAuth();
+  const [statistics, setStatistics] = useState(null);
+  const [isCo2ModalOpen, setIsCo2ModalOpen] = useState(false);
+  const [co2Data, setCo2Data] = useState([]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchStatistics();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const fetchStatistics = async () => {
+    try {
+      const response = await rideHistoryService.getRideStatistics(user.id);
+      setStatistics(response.data);
+    } catch (error) {
+      console.error('Failed to fetch statistics', error);
+    }
+  };
+
+  const handleCo2Click = async () => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const response = await rideHistoryService.getCo2MonthlyStats(user.id, currentYear);
+      setCo2Data(response.data);
+      setIsCo2ModalOpen(true);
+    } catch (error) {
+      console.error("Failed to fetch CO2 stats", error);
+    }
+  };
 
   const riderCards = [
     { 
@@ -184,17 +216,18 @@ const DashboardHome = ({ onSwitchToMap }) => {
           {[
             { 
               label: 'Rides', 
-              value: '127',
+              value: statistics?.totalRides || '0',
               icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
             },
             { 
               label: 'CO₂ Saved', 
-              value: '45kg',
-              icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              value: statistics?.totalCo2Saved ? `${statistics.totalCo2Saved.toFixed(2)}kg` : '0kg',
+              icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+              onClick: handleCo2Click
             },
             { 
               label: 'Distance', 
-              value: '234km',
+              value: statistics?.totalDistance ? `${statistics.totalDistance.toFixed(1)}km` : '0km',
               icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
             }
           ].map((stat, i) => (
@@ -204,7 +237,8 @@ const DashboardHome = ({ onSwitchToMap }) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.8 + i * 0.1 }}
               whileHover={{ y: -3, scale: 1.03 }}
-              className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all group relative overflow-hidden"
+              onClick={stat.onClick}
+              className={`bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all group relative overflow-hidden ${stat.onClick ? 'cursor-pointer' : ''}`}
             >
               <motion.div
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 dark:via-white/5 to-transparent"
@@ -224,6 +258,12 @@ const DashboardHome = ({ onSwitchToMap }) => {
           ))}
         </motion.div>
       </div>
+      
+      <CO2GraphModal 
+        isOpen={isCo2ModalOpen} 
+        onClose={() => setIsCo2ModalOpen(false)} 
+        data={co2Data} 
+      />
     </motion.div>
   );
 };
