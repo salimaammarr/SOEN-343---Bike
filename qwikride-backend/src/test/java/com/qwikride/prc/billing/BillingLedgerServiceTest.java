@@ -7,7 +7,6 @@ import com.qwikride.prc.pricing.domain.FinalizedBill;
 import com.qwikride.prc.pricing.domain.TripFacts;
 import com.qwikride.prc.repository.LedgerEntryRepository;
 import com.qwikride.repository.UserRepository;
-import com.qwikride.service.FlexDollarsService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -19,13 +18,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,9 +33,6 @@ class BillingLedgerServiceTest {
 
     @Mock
     private UserRepository userRepository;
-
-    @Mock
-    private FlexDollarsService flexDollarsService;
 
     @InjectMocks
     private BillingLedgerService billingLedgerService;
@@ -81,9 +75,6 @@ class BillingLedgerServiceTest {
             persisted.setId(99L);
             return persisted;
         });
-        // Mock FlexDollarsService to return 0 used
-        when(flexDollarsService.useFlexDollars(eq(77L), any(BigDecimal.class))).thenReturn(BigDecimal.ZERO);
-
         LedgerEntry result = billingLedgerService.appendTripEntry(bill, tripFacts);
 
         ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
